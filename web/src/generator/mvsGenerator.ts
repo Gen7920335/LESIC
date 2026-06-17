@@ -468,16 +468,16 @@ function connectAdjacentGlyphs(left: GlyphBuild, right: GlyphBuild, cell: number
 
   const segs: TypedSegment[] = [];
   const obstacles = [...left.segments, ...right.segments];
-  if (candidateAllowed(leftTop, rightTop, obstacles)) appendSegment(segs, leftTop, rightTop, "stroke");
-  if (candidateAllowed(leftBottom, rightBottom, obstacles)) appendSegment(segs, leftBottom, rightBottom, "stroke");
+  if (candidateAllowed(leftTop, rightTop, obstacles)) appendSegment(segs, leftTop, rightTop, "connector");
+  if (candidateAllowed(leftBottom, rightBottom, obstacles)) appendSegment(segs, leftBottom, rightBottom, "connector");
 
   const leftHasTop = hasCornerNear(left.sourcePoints, leftTR, tol);
   const leftHasBottom = hasCornerNear(left.sourcePoints, leftBR, tol);
   const rightHasTop = hasCornerNear(right.sourcePoints, rightTL, tol);
   const rightHasBottom = hasCornerNear(right.sourcePoints, rightBL, tol);
   if (leftHasTop && leftHasBottom && rightHasTop && rightHasBottom) {
-    if (candidateAllowed(leftTop, rightBottom, obstacles)) appendSegment(segs, leftTop, rightBottom, "stroke");
-    if (candidateAllowed(leftBottom, rightTop, obstacles)) appendSegment(segs, leftBottom, rightTop, "stroke");
+    if (candidateAllowed(leftTop, rightBottom, obstacles)) appendSegment(segs, leftTop, rightBottom, "connector");
+    if (candidateAllowed(leftBottom, rightTop, obstacles)) appendSegment(segs, leftBottom, rightTop, "connector");
   }
   return segs;
 }
@@ -700,14 +700,14 @@ export function makeGcode(cfg: GeneratorConfig) {
   if (cfg.label) {
     emitTemperatureSet(lines, cfg, cfg.start_temp, "min");
     const typed = buildLabelSegments(cfg);
-    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=glyph_outer_double_contour_plus_convex_hull", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, "; label_inner_contours_per_glyph=2", "; label_outer_hull_passes=2", "; label_inner_contour_span_mm=2.0", `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.length}`, "; label_segments_connector=0");
+    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=glyph_outer_double_contour_plus_convex_hull", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, "; label_inner_contours_per_glyph=2", "; label_outer_hull_passes=2", "; label_inner_contour_span_mm=2.0", `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.filter((s) => s[2] === "stroke").length}`, `; label_segments_connector=${typed.filter((s) => s[2] === "connector").length}`);
     if (typed.length) {
       const start = typed[0][0];
       lines.push(`G0 Z${fmt(cfg.layer_height)} F${fmt(cfg.z_travel_speed * 60, 1)}`);
       lines.push(`G0 X${fmt(start[0])} Y${fmt(start[1])} F${fmt(cfg.travel_speed * 60, 1)} ; label start, only travel move`);
       let eTotal = 0;
       let cursor = start;
-      typed.forEach(([p0, p1]) => {
+      typed.forEach(([p0, p1, kind]) => {
         if (dist(cursor, p0) > 1e-9) {
           lines.push(`G0 X${fmt(p0[0])} Y${fmt(p0[1])} F${fmt(cfg.travel_speed * 60, 1)} ; label stroke jump`);
         }
@@ -715,7 +715,7 @@ export function makeGcode(cfg: GeneratorConfig) {
         eTotal += e;
         labelEnd = p1;
         cursor = p1;
-        lines.push(`G1 X${fmt(p1[0])} Y${fmt(p1[1])} E${fmt(e, 5)} F${fmt(cfg.label_speed * 60, 1)} ; label_stroke width=${fmt(cfg.line_width)}`);
+        lines.push(`G1 X${fmt(p1[0])} Y${fmt(p1[1])} E${fmt(e, 5)} F${fmt(cfg.label_speed * 60, 1)} ; label_${kind} width=${fmt(cfg.line_width)}`);
       });
       lines.push(`; label_estimated_E_mm=${fmt(eTotal, 3)}`);
     } else {

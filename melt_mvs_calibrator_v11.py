@@ -1416,9 +1416,9 @@ def _connect_adjacent_glyphs(left_geom, right_geom, cell):
     segs = []
     obstacles = left_geom["segments"] + right_geom["segments"]
     if _candidate_allowed(left_top, right_top, obstacles):
-        _append_segment(segs, left_top, right_top, "stroke")
+        _append_segment(segs, left_top, right_top, "connector")
     if _candidate_allowed(left_bottom, right_bottom, obstacles):
-        _append_segment(segs, left_bottom, right_bottom, "stroke")
+        _append_segment(segs, left_bottom, right_bottom, "connector")
 
     left_has_top = _has_corner_near(left_geom["source_points"], left_tr, tol)
     left_has_bottom = _has_corner_near(left_geom["source_points"], left_br, tol)
@@ -1426,9 +1426,9 @@ def _connect_adjacent_glyphs(left_geom, right_geom, cell):
     right_has_bottom = _has_corner_near(right_geom["source_points"], right_bl, tol)
     if left_has_top and left_has_bottom and right_has_top and right_has_bottom:
         if _candidate_allowed(left_top, right_bottom, obstacles):
-            _append_segment(segs, left_top, right_bottom, "stroke")
+            _append_segment(segs, left_top, right_bottom, "connector")
         if _candidate_allowed(left_bottom, right_top, obstacles):
-            _append_segment(segs, left_bottom, right_top, "stroke")
+            _append_segment(segs, left_bottom, right_top, "connector")
     return segs
 
 
@@ -1507,6 +1507,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
     stroke_width = cfg["line_width"]
     layer_h = cfg["layer_height"]
     stroke_count = sum(1 for _, _, k in typed_segments if k == "stroke")
+    connector_count = sum(1 for _, _, k in typed_segments if k == "connector")
 
     lines_out += [
         "",
@@ -1527,7 +1528,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
         f"; label_lines={' | '.join(label_lines)}",
         f"; label_segments_total={len(typed_segments)}",
         f"; label_segments_stroke={stroke_count}",
-        "; label_segments_connector=0",
+        f"; label_segments_connector={connector_count}",
     ]
 
     if not typed_segments:
@@ -1554,7 +1555,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
         end_point = p1
         cursor = p1
         lines_out.append(
-            f"G1 X{fmt(p1[0])} Y{fmt(p1[1])} E{fmt(e,5)} F{fmt(cfg['label_speed']*60,1)} ; label_stroke width={fmt(stroke_width)}"
+            f"G1 X{fmt(p1[0])} Y{fmt(p1[1])} E{fmt(e,5)} F{fmt(cfg['label_speed']*60,1)} ; label_{kind} width={fmt(stroke_width)}"
         )
 
     lines_out.append(f"; label_estimated_E_mm={fmt(e_total,3)}")
