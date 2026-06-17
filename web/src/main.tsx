@@ -436,16 +436,39 @@ function Preview({ cfg, gcode, language }: { cfg: GeneratorConfig; gcode: string
   const pad = 18;
   const vb = `${-pad} ${-pad} ${data.bed.x + pad * 2} ${data.bed.y + pad * 2}`;
   const mapPoint = ([x, y]: [number, number]) => [x, data.bed.y - y] as const;
+  const segmentKey = (a: readonly [number, number], b: readonly [number, number]) => {
+    const k1 = `${a[0].toFixed(4)},${a[1].toFixed(4)}|${b[0].toFixed(4)},${b[1].toFixed(4)}`;
+    const k2 = `${b[0].toFixed(4)},${b[1].toFixed(4)}|${a[0].toFixed(4)},${a[1].toFixed(4)}`;
+    return k1 < k2 ? k1 : k2;
+  };
   const circlePaths = data.circleSegments.map(([a, b], i) => {
     const pa = mapPoint(a);
     const pb = mapPoint(b);
     return <line key={i} x1={pa[0]} y1={pa[1]} x2={pb[0]} y2={pb[1]} className="circleSegment" />;
   });
-  const labelPaths = data.labelSegments.map(([a, b, kind], i) => {
-    const pa = mapPoint(a);
-    const pb = mapPoint(b);
-    return <line key={i} x1={pa[0]} y1={pa[1]} x2={pb[0]} y2={pb[1]} className={kind} />;
-  });
+  const aggregatedLabelSegments = useMemo(() => {
+    const grouped = new Map<string, { a: readonly [number, number]; b: readonly [number, number]; kind: string; count: number }>();
+    data.labelSegments.forEach(([a, b, kind]) => {
+      const pa = mapPoint(a);
+      const pb = mapPoint(b);
+      const key = `${kind}:${segmentKey(pa, pb)}`;
+      const prev = grouped.get(key);
+      if (prev) prev.count += 1;
+      else grouped.set(key, { a: pa, b: pb, kind, count: 1 });
+    });
+    return [...grouped.values()];
+  }, [data.labelSegments]);
+  const labelPaths = aggregatedLabelSegments.map(({ a, b, kind, count }, i) => (
+    <line
+      key={i}
+      x1={a[0]}
+      y1={a[1]}
+      x2={b[0]}
+      y2={b[1]}
+      className={kind}
+      style={{ strokeWidth: `${1.1 + (count - 1) * 0.95}px` }}
+    />
+  ));
   const tooLarge = data.square.x < 0 || data.square.y < 0 || data.square.x + data.square.d > data.bed.x || data.square.y + data.square.d > data.bed.y;
 
   return (
