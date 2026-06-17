@@ -31,6 +31,7 @@ function optimalLineWidth(nozzleSize: number) {
 }
 
 type Language = "ko" | "en";
+
 const translations = {
   en: {
     unknownWarning: "Acceleration/speed limits may not be unlocked.",
@@ -59,16 +60,13 @@ const translations = {
     layersPerBandDesc: "Layers per temperature band.",
     bedTempDesc: "Standalone bed temperature.",
     layerHeightDesc: "Layer height.",
-    lineWidthDesc: "Circular wall line width.",
     mvsMinDesc: "Starting MVS value, mm3/s.",
     mvsMaxDesc: "Maximum MVS value, mm3/s.",
     arcSegmentsDesc: "Segments per circle.",
     bedXDesc: "Empty uses the preset bed X.",
     bedYDesc: "Empty uses the preset bed Y.",
     placementDesc: "Empty uses automatic placement.",
-    labelLayoutDesc: "Bottom label layout.",
     labelHeightDesc: "Empty uses auto-fit.",
-    labelStrokeDesc: "Label outline width. Actual output follows the test print line width.",
     motionAccelDesc: "Requested acceleration.",
     motionVelocityDesc: "Requested XY velocity limit.",
     motionJerkDesc: "Marlin classic jerk hint.",
@@ -85,17 +83,16 @@ const translations = {
     boundingWarning: "bounding square exceeds bed",
     language: "Language",
     labelEnabled: "label",
-    threeLine: "three-line",
-    oneLine: "one-line",
+    nozzleSizeDesc: "Choose one supported nozzle size. Circular line width is set automatically.",
   },
   ko: {
-    unknownWarning: "가속/속도 제한이 해제되지 않았을 수 있습니다.",
+    unknownWarning: "가속도/속도 제한이 해제되지 않았을 수 있습니다.",
     readyLog: "준비 완료. Preview 또는 Generate G-code를 누르세요.",
-    generatedLog: (name: string) => `G-code 생성됨: ${name}`,
+    generatedLog: (name: string) => `G-code 생성: ${name}`,
     previewLogBands: (bands: number) => `Preview: 계산된 밴드 수 = ${bands}`,
     previewLogParsed: "Preview가 생성된 G-code 기준으로 갱신되었습니다.",
     outputPrompt: "출력 G-code 파일명",
-    outputSetLog: (name: string) => `출력 파일명 설정됨: ${name}`,
+    outputSetLog: (name: string) => `출력 파일명 설정: ${name}`,
     subtitle: "왼쪽은 설정, 오른쪽은 G-code 기반 베드 프리뷰입니다. 항상 standalone이며 G28을 먼저 실행합니다.",
     output: "출력",
     printer: "프린터",
@@ -105,27 +102,23 @@ const translations = {
     placement: "배치 오버라이드",
     label: "라벨",
     firmwareMotion: "펌웨어 모션",
-    outputDesc: "다운로드될 G-code 파일명입니다.",
+    outputDesc: "생성된 G-code 다운로드 파일명입니다.",
     printerPresetDesc: "printer_presets.json의 프린터 프리셋입니다.",
     firmwareModeDesc: "프리셋에서 자동 추론되지만 수동으로 바꿀 수 있습니다.",
     filamentNameDesc: "하단 라벨에 출력될 필라멘트 이름입니다.",
     startTempDesc: "시작 노즐 온도입니다.",
     endTempDesc: "종료 노즐 온도입니다. 밴드 수는 자동 계산됩니다.",
-    tempStepDesc: "밴드당 온도 감소량입니다.",
+    tempStepDesc: "밴드당 온도 감소값입니다.",
     layersPerBandDesc: "온도 밴드당 레이어 수입니다.",
     bedTempDesc: "standalone 베드 온도입니다.",
     layerHeightDesc: "레이어 높이입니다.",
-    lineWidthDesc: "원형 벽 라인 폭입니다.",
     mvsMinDesc: "시작 MVS 값, mm3/s.",
     mvsMaxDesc: "최대 MVS 값, mm3/s.",
     arcSegmentsDesc: "원 한 바퀴당 세그먼트 수입니다.",
     bedXDesc: "비워두면 프리셋 bed X를 사용합니다.",
     bedYDesc: "비워두면 프리셋 bed Y를 사용합니다.",
     placementDesc: "비워두면 자동 배치를 사용합니다.",
-    labelLayoutDesc: "하단 라벨 레이아웃입니다.",
     labelHeightDesc: "비워두면 자동 맞춤을 사용합니다.",
-    labelStrokeDesc: "글자 스트로크 압출 폭입니다.",
-    labelConnectorDesc: "라벨 연결선 압출 폭입니다.",
     motionAccelDesc: "요청 가속도입니다.",
     motionVelocityDesc: "요청 XY 속도 제한입니다.",
     motionJerkDesc: "Marlin classic jerk 힌트입니다.",
@@ -139,11 +132,10 @@ const translations = {
     previewTitle: "Preview: 생성된 G-code 기준",
     firmware: "firmware",
     strokeWidth: (stroke: string) => `label width ${stroke}`,
-    boundingWarning: "바운딩 사각형이 베드를 벗어납니다",
+    boundingWarning: "바운딩 사각형이 베드를 벗어납니다.",
     language: "언어",
-    labelEnabled: "label",
-    threeLine: "three-line",
-    oneLine: "one-line",
+    labelEnabled: "라벨 사용",
+    nozzleSizeDesc: "지원 노즐 구경 중 하나를 선택합니다. 원형 테스트 선폭은 자동으로 설정됩니다.",
   },
 } as const;
 
@@ -278,8 +270,8 @@ function App() {
   const [logs, setLogs] = useState<string[]>([translations.ko.readyLog]);
   const { cfg, gcode, error } = useMemo(() => {
     try {
-      const cfg = buildConfig(draft);
-      return { cfg, gcode: makeGcode(cfg), error: "" };
+      const built = buildConfig(draft);
+      return { cfg: built, gcode: makeGcode(built), error: "" };
     } catch (err) {
       return { cfg: null, gcode: "", error: err instanceof Error ? err.message : String(err) };
     }
@@ -348,7 +340,7 @@ function App() {
             <Select label="firmware_mode" description={t.firmwareModeDesc} value={draft.firmware_mode} options={["klipper", "marlin", "bambu", "unknown"]} onChange={(v) => update("firmware_mode", v as FirmwareMode)} />
             <Select
               label="nozzle_size"
-              description={language === "ko" ? "지원 노즐 구경 중 하나를 선택합니다. 원형 테스트 선폭은 자동으로 설정됩니다." : "Choose one supported nozzle size. Circular line width is set automatically."}
+              description={t.nozzleSizeDesc}
               value={String(draft.nozzle_size)}
               options={nozzleOptions.map((v) => ({ value: String(v), label: `${fmt(v, 2)} mm` }))}
               onChange={(v) => update("nozzle_size", Number(v))}
