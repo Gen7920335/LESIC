@@ -1092,23 +1092,46 @@ def emit_label(lines_out, cfg, label_lines, fa):
     lines_out.append("; ---------- end bottom inner label ----------")
 
 
-def _build_glyph_segments_only(ch, x0, y0, cell, x_scale):
+def _build_glyph_segments_only(ch, x0, y0, cell, x_scale, current_pos=None):
     """
-    Build one glyph as typed segments, without connecting it to previous external position.
-    Includes internal stroke-to-stroke connectors.
+    Build one glyph as typed segments.
+    If current_pos is provided, choose the nearest stroke endpoint as the next entry
+    and greedily continue by nearest remaining stroke endpoint.
     Returns (segments, start_point, end_point).
     """
     strokes = TXT_SHX_STROKE_FONT.get(ch.upper(), TXT_SHX_STROKE_FONT[" "])
     segs = []
-    pos = None
-    start_point = None
-
+    remaining = []
     for stroke in strokes:
         if not stroke:
             continue
         stroke_pts = [_transform_stroke_point(p, x0, y0, cell, x_scale) for p in stroke]
-        if not stroke_pts:
-            continue
+        if stroke_pts:
+            remaining.append(stroke_pts)
+    pos = current_pos
+    start_point = None
+
+    while remaining:
+        best_index = 0
+        best_reverse = False
+        best_distance = float("inf")
+
+        if pos is not None:
+            for i, pts in enumerate(remaining):
+                d_forward = dist(pos, pts[0])
+                if d_forward < best_distance:
+                    best_distance = d_forward
+                    best_index = i
+                    best_reverse = False
+                d_reverse = dist(pos, pts[-1])
+                if d_reverse < best_distance:
+                    best_distance = d_reverse
+                    best_index = i
+                    best_reverse = True
+
+        stroke_pts = remaining.pop(best_index)
+        if best_reverse:
+            stroke_pts = list(reversed(stroke_pts))
         if start_point is None:
             start_point = stroke_pts[0]
         if pos is not None:
@@ -1123,18 +1146,14 @@ def _build_glyph_segments_only(ch, x0, y0, cell, x_scale):
 def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=None):
     """
     Glyph builder:
-    - always traverse each glyph in its native stroke order
-    - connect previous endpoint to the next glyph's true start point
+    - choose the nearest reachable stroke endpoint as glyph entry
+    - connect by shortest local jump
     """
-    segs, start, end = _build_glyph_segments_only(ch, x0, y0, cell, x_scale)
+    segs, start, end = _build_glyph_segments_only(ch, x0, y0, cell, x_scale, current_pos=current_pos)
     if start is None or end is None:
         return [], current_pos
 
-    out = []
-    if current_pos is not None:
-        _append_segment(out, current_pos, start, "connector")
-    out.extend(segs)
-    return out, end
+    return segs, end
 
 
 def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):

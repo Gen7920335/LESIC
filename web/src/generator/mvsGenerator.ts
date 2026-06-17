@@ -190,19 +190,45 @@ function appendSegment(out: TypedSegment[], p0: Point | undefined, p1: Point | u
   out.push([p0, p1, kind]);
 }
 
-function buildGlyph(ch: string, x0: number, y0: number, cell: number, xScale: number) {
+function buildGlyph(ch: string, x0: number, y0: number, cell: number, xScale: number, currentPos?: Point) {
   const strokes = FONT[ch.toUpperCase()] ?? FONT[" "];
   const segs: TypedSegment[] = [];
-  let pos: Point | undefined;
+  const remaining = strokes
+    .map((stroke) => stroke.map((p) => transform(p, x0, y0, cell, xScale)))
+    .filter((pts) => pts.length > 0);
+  let pos: Point | undefined = currentPos;
   let start: Point | undefined;
-  for (const stroke of strokes) {
-    const pts = stroke.map((p) => transform(p, x0, y0, cell, xScale));
-    if (!pts.length) continue;
+
+  while (remaining.length) {
+    let bestIndex = 0;
+    let bestReverse = false;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    if (pos) {
+      remaining.forEach((pts, index) => {
+        const forwardDistance = dist(pos, pts[0]);
+        if (forwardDistance < bestDistance) {
+          bestDistance = forwardDistance;
+          bestIndex = index;
+          bestReverse = false;
+        }
+        const reverseDistance = dist(pos, pts[pts.length - 1]);
+        if (reverseDistance < bestDistance) {
+          bestDistance = reverseDistance;
+          bestIndex = index;
+          bestReverse = true;
+        }
+      });
+    }
+
+    const [picked] = remaining.splice(bestIndex, 1);
+    const pts = bestReverse ? [...picked].reverse() : picked;
     start ??= pts[0];
     if (pos) appendSegment(segs, pos, pts[0], "connector");
     for (let i = 0; i < pts.length - 1; i++) appendSegment(segs, pts[i], pts[i + 1], "stroke");
     pos = pts[pts.length - 1];
   }
+
   return { segs, start, end: pos };
 }
 
@@ -249,11 +275,10 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
     [...text].forEach((_, ci) => {
-      const built = buildGlyph(text[ci], xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale);
+      const built = buildGlyph(text[ci], xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, pos);
       const segs = built.segs;
       const start = built.start;
       const end = built.end;
-      if (pos && start) appendSegment(all, pos, start, "connector");
       all.push(...segs);
       pos = end;
     });
