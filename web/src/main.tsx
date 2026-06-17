@@ -287,8 +287,19 @@ function Preview({ cfg, gcode }: { cfg: GeneratorConfig; gcode: string }) {
   const data = useMemo(() => getPreviewData(cfg, gcode), [cfg, gcode]);
   const pad = 18;
   const vb = `${-pad} ${-pad} ${data.bed.x + pad * 2} ${data.bed.y + pad * 2}`;
-  const circlePaths = data.circleSegments.map(([a, b], i) => <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} className="circleSegment" />);
-  const labelPaths = data.labelSegments.map(([a, b, kind], i) => <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} className={kind} />);
+  const mapPoint = ([x, y]: [number, number]) => [x, data.bed.y - y] as const;
+  const squareTop = data.bed.y - (data.square.y + data.square.d);
+  const seam = mapPoint(data.seam);
+  const circlePaths = data.circleSegments.map(([a, b], i) => {
+    const pa = mapPoint(a);
+    const pb = mapPoint(b);
+    return <line key={i} x1={pa[0]} y1={pa[1]} x2={pb[0]} y2={pb[1]} className="circleSegment" />;
+  });
+  const labelPaths = data.labelSegments.map(([a, b, kind], i) => {
+    const pa = mapPoint(a);
+    const pb = mapPoint(b);
+    return <line key={i} x1={pa[0]} y1={pa[1]} x2={pb[0]} y2={pb[1]} className={kind} />;
+  });
   const tooLarge = data.square.x < 0 || data.square.y < 0 || data.square.x + data.square.d > data.bed.x || data.square.y + data.square.d > data.bed.y;
 
   return (
@@ -297,13 +308,13 @@ function Preview({ cfg, gcode }: { cfg: GeneratorConfig; gcode: string }) {
       <div className="previewStage">
         <svg viewBox={vb} role="img" aria-label="MVS calibration preview">
           <rect x={0} y={0} width={data.bed.x} height={data.bed.y} className="bed" />
-          <rect x={data.square.x} y={data.square.y} width={data.square.d} height={data.square.d} className="square" />
+          <rect x={data.square.x} y={squareTop} width={data.square.d} height={data.square.d} className="square" />
           <g>{circlePaths}</g>
           <g>{labelPaths}</g>
-          <circle cx={data.seam[0]} cy={data.seam[1]} r={2.2} className="seam" />
+          <circle cx={seam[0]} cy={seam[1]} r={2.2} className="seam" />
           <text x={4} y={12} className="previewText">Bed {fmt(cfg.bed_x)}x{fmt(cfg.bed_y)}</text>
-          <text x={data.square.x + data.square.d / 2 - 10} y={data.square.y - 6} className="previewText">D{fmt(cfg.circle_diameter)}</text>
-          <text x={data.square.x} y={data.square.y + data.square.d + 6} className="previewText muted">X{fmt(cfg.square_x)} Y{fmt(cfg.square_y)}</text>
+          <text x={data.square.x + data.square.d / 2 - 10} y={squareTop - 6} className="previewText">D{fmt(cfg.circle_diameter)}</text>
+          <text x={data.square.x} y={squareTop + data.square.d + 6} className="previewText muted">X{fmt(cfg.square_x)} Y{fmt(cfg.square_y)}</text>
           <text x={data.bed.x - 92} y={10} className="previewText">firmware: {cfg.firmware_mode}</text>
           <text x={data.bed.x - 92} y={20} className="previewText">stroke {fmt(cfg.label_stroke_width, 1)} / connector {fmt(cfg.label_connector_width, 1)}</text>
           {cfg.firmware_mode === "unknown" && <text x={data.bed.x - 120} y={32} className="previewText danger">{unknownWarning}</text>}
