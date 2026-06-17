@@ -803,9 +803,9 @@ export function makeGcode(cfg: GeneratorConfig) {
     for (let i = 0; i < cfg.arc_segments; i++) {
       const progressMid = (i + 0.5) / cfg.arc_segments;
       const requestedMvs = cfg.mvs_min + (cfg.mvs_max - cfg.mvs_min) * progressMid;
-      let xySpeed = requestedMvs > 0 ? requestedMvs / crossSection : cfg.min_xy_speed;
+      let xySpeed = layer === 1 ? 60 : (requestedMvs > 0 ? requestedMvs / crossSection : cfg.min_xy_speed);
       let actualMvs = xySpeed * crossSection;
-      if (cfg.max_xy_speed > 0 && xySpeed > cfg.max_xy_speed) {
+      if (layer !== 1 && cfg.max_xy_speed > 0 && xySpeed > cfg.max_xy_speed) {
         xySpeed = cfg.max_xy_speed;
         actualMvs = xySpeed * crossSection;
       }

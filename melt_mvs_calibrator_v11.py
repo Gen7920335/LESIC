@@ -1813,9 +1813,9 @@ def make_gcode(cfg):
         for i in range(cfg["arc_segments"]):
             progress_mid = (i + 0.5) / cfg["arc_segments"]
             requested_mvs = cfg["mvs_min"] + (cfg["mvs_max"] - cfg["mvs_min"]) * progress_mid
-            xy_speed = requested_mvs / cross_section if requested_mvs > 0 else cfg["min_xy_speed"]
+            xy_speed = 60 if layer == 1 else (requested_mvs / cross_section if requested_mvs > 0 else cfg["min_xy_speed"])
             actual_mvs = xy_speed * cross_section
-            if cfg["max_xy_speed"] > 0 and xy_speed > cfg["max_xy_speed"]:
+            if layer != 1 and cfg["max_xy_speed"] > 0 and xy_speed > cfg["max_xy_speed"]:
                 xy_speed = cfg["max_xy_speed"]
                 actual_mvs = xy_speed * cross_section
             b = pts[i + 1]
