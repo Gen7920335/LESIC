@@ -16,7 +16,123 @@ import "./styles.css";
 
 const presets = presetsJson as Record<string, PrinterPreset>;
 const presetNames = Object.keys(presets).sort();
-const unknownWarning = "Acceleration/speed limits may not be unlocked.";
+type Language = "ko" | "en";
+const translations = {
+  en: {
+    unknownWarning: "Acceleration/speed limits may not be unlocked.",
+    readyLog: "Ready. Press Preview or Generate G-code.",
+    generatedLog: (name: string) => `Generated G-code: ${name}`,
+    previewLogBands: (bands: number) => `Preview: computed bands = ${bands}`,
+    previewLogParsed: "Preview parsed from generated G-code.",
+    outputPrompt: "Output G-code file name",
+    outputSetLog: (name: string) => `Output file name set: ${name}`,
+    subtitle: "Left controls, right G-code based bed preview. Always standalone, G28 first.",
+    output: "Output",
+    printer: "Printer",
+    temperature: "Temperature",
+    geometry: "MVS / Geometry",
+    buildVolume: "Build Volume Override",
+    placement: "Placement Override",
+    label: "Label",
+    firmwareMotion: "Firmware Motion",
+    outputDesc: "Generated G-code download file name.",
+    printerPresetDesc: "Printer preset from printer_presets.json.",
+    firmwareModeDesc: "Auto-inferred from preset, but can be overridden.",
+    filamentNameDesc: "Filament name printed in the bottom label.",
+    startTempDesc: "Starting nozzle temperature.",
+    endTempDesc: "Ending nozzle temperature; bands are computed automatically.",
+    tempStepDesc: "Temperature drop per band.",
+    layersPerBandDesc: "Layers per temperature band.",
+    bedTempDesc: "Standalone bed temperature.",
+    layerHeightDesc: "Layer height.",
+    lineWidthDesc: "Circular wall line width.",
+    mvsMinDesc: "Starting MVS value, mm3/s.",
+    mvsMaxDesc: "Maximum MVS value, mm3/s.",
+    arcSegmentsDesc: "Segments per circle.",
+    bedXDesc: "Empty uses the preset bed X.",
+    bedYDesc: "Empty uses the preset bed Y.",
+    placementDesc: "Empty uses automatic placement.",
+    labelLayoutDesc: "Bottom label layout.",
+    labelHeightDesc: "Empty uses auto-fit.",
+    labelStrokeDesc: "Extrusion width for glyph strokes.",
+    labelConnectorDesc: "Extrusion width for label connectors.",
+    motionAccelDesc: "Requested acceleration.",
+    motionVelocityDesc: "Requested XY velocity limit.",
+    motionJerkDesc: "Marlin classic jerk hint.",
+    presetPlaceholder: "preset",
+    autoPlaceholder: "auto",
+    generate: "Generate G-code",
+    preview: "Preview",
+    chooseOutput: "Choose output",
+    showGcode: "Show G-code",
+    hideGcode: "Hide G-code",
+    previewTitle: "Preview: parsed from generated G-code",
+    firmware: "firmware",
+    strokeConnector: (stroke: string, connector: string) => `stroke ${stroke} / connector ${connector}`,
+    boundingWarning: "bounding square exceeds bed",
+    language: "Language",
+    labelEnabled: "label",
+    threeLine: "three-line",
+    oneLine: "one-line",
+  },
+  ko: {
+    unknownWarning: "가속/속도 제한이 해제되지 않았을 수 있습니다.",
+    readyLog: "준비 완료. Preview 또는 Generate G-code를 누르세요.",
+    generatedLog: (name: string) => `G-code 생성됨: ${name}`,
+    previewLogBands: (bands: number) => `Preview: 계산된 밴드 수 = ${bands}`,
+    previewLogParsed: "Preview가 생성된 G-code 기준으로 갱신되었습니다.",
+    outputPrompt: "출력 G-code 파일명",
+    outputSetLog: (name: string) => `출력 파일명 설정됨: ${name}`,
+    subtitle: "왼쪽은 설정, 오른쪽은 G-code 기반 베드 프리뷰입니다. 항상 standalone이며 G28을 먼저 실행합니다.",
+    output: "출력",
+    printer: "프린터",
+    temperature: "온도",
+    geometry: "MVS / Geometry",
+    buildVolume: "빌드 볼륨 오버라이드",
+    placement: "배치 오버라이드",
+    label: "라벨",
+    firmwareMotion: "펌웨어 모션",
+    outputDesc: "다운로드될 G-code 파일명입니다.",
+    printerPresetDesc: "printer_presets.json의 프린터 프리셋입니다.",
+    firmwareModeDesc: "프리셋에서 자동 추론되지만 수동으로 바꿀 수 있습니다.",
+    filamentNameDesc: "하단 라벨에 출력될 필라멘트 이름입니다.",
+    startTempDesc: "시작 노즐 온도입니다.",
+    endTempDesc: "종료 노즐 온도입니다. 밴드 수는 자동 계산됩니다.",
+    tempStepDesc: "밴드당 온도 감소량입니다.",
+    layersPerBandDesc: "온도 밴드당 레이어 수입니다.",
+    bedTempDesc: "standalone 베드 온도입니다.",
+    layerHeightDesc: "레이어 높이입니다.",
+    lineWidthDesc: "원형 벽 라인 폭입니다.",
+    mvsMinDesc: "시작 MVS 값, mm3/s.",
+    mvsMaxDesc: "최대 MVS 값, mm3/s.",
+    arcSegmentsDesc: "원 한 바퀴당 세그먼트 수입니다.",
+    bedXDesc: "비워두면 프리셋 bed X를 사용합니다.",
+    bedYDesc: "비워두면 프리셋 bed Y를 사용합니다.",
+    placementDesc: "비워두면 자동 배치를 사용합니다.",
+    labelLayoutDesc: "하단 라벨 레이아웃입니다.",
+    labelHeightDesc: "비워두면 자동 맞춤을 사용합니다.",
+    labelStrokeDesc: "글자 스트로크 압출 폭입니다.",
+    labelConnectorDesc: "라벨 연결선 압출 폭입니다.",
+    motionAccelDesc: "요청 가속도입니다.",
+    motionVelocityDesc: "요청 XY 속도 제한입니다.",
+    motionJerkDesc: "Marlin classic jerk 힌트입니다.",
+    presetPlaceholder: "preset",
+    autoPlaceholder: "auto",
+    generate: "G-code 생성",
+    preview: "Preview",
+    chooseOutput: "출력 선택",
+    showGcode: "G-code 보기",
+    hideGcode: "G-code 숨기기",
+    previewTitle: "Preview: 생성된 G-code 기준",
+    firmware: "firmware",
+    strokeConnector: (stroke: string, connector: string) => `stroke ${stroke} / connector ${connector}`,
+    boundingWarning: "바운딩 사각형이 베드를 벗어납니다",
+    language: "언어",
+    labelEnabled: "label",
+    threeLine: "three-line",
+    oneLine: "one-line",
+  },
+} as const;
 
 type Draft = {
   output: string;
@@ -143,8 +259,10 @@ function buildConfig(draft: Draft): GeneratorConfig {
 
 function App() {
   const [draft, setDraft] = useState<Draft>(initialDraft);
+  const [language, setLanguage] = useState<Language>("ko");
   const [showGcode, setShowGcode] = useState(false);
-  const [logs, setLogs] = useState<string[]>(["Ready. Press Preview or Generate G-code."]);
+  const t = translations[language];
+  const [logs, setLogs] = useState<string[]>([translations.ko.readyLog]);
   const { cfg, gcode, error } = useMemo(() => {
     try {
       const cfg = buildConfig(draft);
@@ -171,94 +289,114 @@ function App() {
     a.download = cfg.output.endsWith(".gcode") ? cfg.output : `${cfg.output}.gcode`;
     a.click();
     URL.revokeObjectURL(url);
-    setLogs((prev) => [...prev, `Generated G-code: ${a.download}`]);
+    setLogs((prev) => [...prev, t.generatedLog(a.download)]);
   }
 
   function preview() {
     if (!cfg || error) return;
     setShowGcode(false);
-    setLogs((prev) => [...prev, `Preview: computed bands = ${cfg.bands}`, "Preview parsed from generated G-code."]);
+    setLogs((prev) => [...prev, t.previewLogBands(cfg.bands), t.previewLogParsed]);
   }
 
   function chooseOutput() {
-    const next = window.prompt("Output G-code file name", draft.output);
+    const next = window.prompt(t.outputPrompt, draft.output);
     if (!next?.trim()) return;
     update("output", next.trim());
-    setLogs((prev) => [...prev, `Output file name set: ${next.trim()}`]);
+    setLogs((prev) => [...prev, t.outputSetLog(next.trim())]);
   }
 
   return (
     <main className="app">
       <header className="appHeader">
-        <h1>Melt / MVS Calibrator UI v21</h1>
-        <p>Left controls, right G-code based bed preview. Always standalone, G28 first.</p>
-        {draft.firmware_mode === "unknown" && <div className="warning">{unknownWarning}</div>}
+        <div className="headerRow">
+          <div>
+            <h1>Melt / MVS Calibrator UI v21</h1>
+            <p>{t.subtitle}</p>
+          </div>
+          <label className="languageSwitch">
+            <span>{t.language}</span>
+            <select value={language} onChange={(e) => setLanguage(e.target.value as Language)}>
+              <option value="ko">한국어</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+        </div>
+        {draft.firmware_mode === "unknown" && <div className="warning">{t.unknownWarning}</div>}
       </header>
 
       <div className="shell">
         <section className="controls">
-          <Fieldset title="Output">
-            <TextField label="output" description="Generated G-code download file name." value={draft.output} onChange={(v) => update("output", v)} />
+          <Fieldset title={t.output}>
+            <TextField label="output" description={t.outputDesc} value={draft.output} onChange={(v) => update("output", v)} />
           </Fieldset>
 
-          <Fieldset title="Printer">
-            <Select label="printer_preset" description="Printer preset from printer_presets.json." value={draft.printer_preset} options={presetNames} onChange={selectPreset} />
-            <Select label="firmware_mode" description="Auto-inferred from preset, but can be overridden." value={draft.firmware_mode} options={["klipper", "marlin", "bambu", "unknown"]} onChange={(v) => update("firmware_mode", v as FirmwareMode)} />
-            <TextField label="filament_name" description="Filament name printed in the bottom label." value={draft.filament_name} onChange={(v) => update("filament_name", v)} />
+          <Fieldset title={t.printer}>
+            <Select label="printer_preset" description={t.printerPresetDesc} value={draft.printer_preset} options={presetNames} onChange={selectPreset} />
+            <Select label="firmware_mode" description={t.firmwareModeDesc} value={draft.firmware_mode} options={["klipper", "marlin", "bambu", "unknown"]} onChange={(v) => update("firmware_mode", v as FirmwareMode)} />
+            <TextField label="filament_name" description={t.filamentNameDesc} value={draft.filament_name} onChange={(v) => update("filament_name", v)} />
           </Fieldset>
 
-          <Fieldset title="Temperature">
-            <NumberField label="start_temp" description="Starting nozzle temperature." value={draft.start_temp} onChange={(v) => update("start_temp", v)} />
-            <NumberField label="end_temp" description="Ending nozzle temperature; bands are computed automatically." value={draft.end_temp} onChange={(v) => update("end_temp", v)} />
-            <NumberField label="temp_step" description="Temperature drop per band." value={draft.temp_step} onChange={(v) => update("temp_step", v)} />
-            <NumberField label="layers_per_band" description="Layers per temperature band." value={draft.layers_per_band} onChange={(v) => update("layers_per_band", Math.max(1, Math.round(v)))} />
-            <NumberField label="bed_temp" description="Standalone bed temperature." value={draft.bed_temp} onChange={(v) => update("bed_temp", v)} />
+          <Fieldset title={t.temperature}>
+            <NumberField label="start_temp" description={t.startTempDesc} value={draft.start_temp} onChange={(v) => update("start_temp", v)} />
+            <NumberField label="end_temp" description={t.endTempDesc} value={draft.end_temp} onChange={(v) => update("end_temp", v)} />
+            <NumberField label="temp_step" description={t.tempStepDesc} value={draft.temp_step} onChange={(v) => update("temp_step", v)} />
+            <NumberField label="layers_per_band" description={t.layersPerBandDesc} value={draft.layers_per_band} onChange={(v) => update("layers_per_band", Math.max(1, Math.round(v)))} />
+            <NumberField label="bed_temp" description={t.bedTempDesc} value={draft.bed_temp} onChange={(v) => update("bed_temp", v)} />
           </Fieldset>
 
-          <Fieldset title="MVS / Geometry">
-            <NumberField label="layer_height" description="Layer height." value={draft.layer_height} onChange={(v) => update("layer_height", v)} />
-            <NumberField label="line_width" description="Circular wall line width." value={draft.line_width} onChange={(v) => update("line_width", v)} />
-            <NumberField label="mvs_min" description="Starting MVS value, mm3/s." value={draft.mvs_min} onChange={(v) => update("mvs_min", v)} />
-            <NumberField label="mvs_max" description="Maximum MVS value, mm3/s." value={draft.mvs_max} onChange={(v) => update("mvs_max", v)} />
-            <NumberField label="arc_segments" description="Segments per circle." value={draft.arc_segments} onChange={(v) => update("arc_segments", Math.max(12, Math.round(v)))} />
+          <Fieldset title={t.geometry}>
+            <NumberField label="layer_height" description={t.layerHeightDesc} value={draft.layer_height} onChange={(v) => update("layer_height", v)} />
+            <NumberField label="line_width" description={t.lineWidthDesc} value={draft.line_width} onChange={(v) => update("line_width", v)} />
+            <NumberField label="mvs_min" description={t.mvsMinDesc} value={draft.mvs_min} onChange={(v) => update("mvs_min", v)} />
+            <NumberField label="mvs_max" description={t.mvsMaxDesc} value={draft.mvs_max} onChange={(v) => update("mvs_max", v)} />
+            <NumberField label="arc_segments" description={t.arcSegmentsDesc} value={draft.arc_segments} onChange={(v) => update("arc_segments", Math.max(12, Math.round(v)))} />
           </Fieldset>
 
-          <Fieldset title="Build Volume Override">
-            <TextField label="bed_x" description="Empty uses the preset bed X." value={draft.bed_x} onChange={(v) => update("bed_x", v)} placeholder="preset" />
-            <TextField label="bed_y" description="Empty uses the preset bed Y." value={draft.bed_y} onChange={(v) => update("bed_y", v)} placeholder="preset" />
+          <Fieldset title={t.buildVolume}>
+            <TextField label="bed_x" description={t.bedXDesc} value={draft.bed_x} onChange={(v) => update("bed_x", v)} placeholder={t.presetPlaceholder} />
+            <TextField label="bed_y" description={t.bedYDesc} value={draft.bed_y} onChange={(v) => update("bed_y", v)} placeholder={t.presetPlaceholder} />
           </Fieldset>
 
-          <Fieldset title="Placement Override">
-            <TextField label="square_x" description="Empty uses automatic placement." value={draft.square_x} onChange={(v) => update("square_x", v)} placeholder="auto" />
-            <TextField label="square_y" description="Empty uses automatic placement." value={draft.square_y} onChange={(v) => update("square_y", v)} placeholder="auto" />
-            <TextField label="circle_diameter" description="Empty uses automatic placement." value={draft.circle_diameter} onChange={(v) => update("circle_diameter", v)} placeholder="auto" />
+          <Fieldset title={t.placement}>
+            <TextField label="square_x" description={t.placementDesc} value={draft.square_x} onChange={(v) => update("square_x", v)} placeholder={t.autoPlaceholder} />
+            <TextField label="square_y" description={t.placementDesc} value={draft.square_y} onChange={(v) => update("square_y", v)} placeholder={t.autoPlaceholder} />
+            <TextField label="circle_diameter" description={t.placementDesc} value={draft.circle_diameter} onChange={(v) => update("circle_diameter", v)} placeholder={t.autoPlaceholder} />
           </Fieldset>
 
-          <Fieldset title="Label">
-            <label className="check"><input type="checkbox" checked={draft.label} onChange={(e) => update("label", e.target.checked)} /> label</label>
-            <Select label="label_layout" description="Bottom label layout." value={draft.label_layout} options={["three-line", "one-line"]} onChange={(v) => update("label_layout", v as Draft["label_layout"])} />
-            <TextField label="label_height" description="Empty uses auto-fit." value={draft.label_height} onChange={(v) => update("label_height", v)} placeholder="auto" />
-            <NumberField label="label_stroke_width" description="Extrusion width for glyph strokes." value={draft.label_stroke_width} onChange={(v) => update("label_stroke_width", v)} />
-            <NumberField label="label_connector_width" description="Extrusion width for label connectors." value={draft.label_connector_width} onChange={(v) => update("label_connector_width", v)} />
+          <Fieldset title={t.label}>
+            <label className="check"><input type="checkbox" checked={draft.label} onChange={(e) => update("label", e.target.checked)} /> {t.labelEnabled}</label>
+            <Select
+              label="label_layout"
+              description={t.labelLayoutDesc}
+              value={draft.label_layout}
+              options={[
+                { value: "three-line", label: t.threeLine },
+                { value: "one-line", label: t.oneLine },
+              ]}
+              onChange={(v) => update("label_layout", v as Draft["label_layout"])}
+            />
+            <TextField label="label_height" description={t.labelHeightDesc} value={draft.label_height} onChange={(v) => update("label_height", v)} placeholder={t.autoPlaceholder} />
+            <NumberField label="label_stroke_width" description={t.labelStrokeDesc} value={draft.label_stroke_width} onChange={(v) => update("label_stroke_width", v)} />
+            <NumberField label="label_connector_width" description={t.labelConnectorDesc} value={draft.label_connector_width} onChange={(v) => update("label_connector_width", v)} />
           </Fieldset>
 
-          <Fieldset title="Firmware Motion">
-            <NumberField label="motion_accel" description="Requested acceleration." value={draft.motion_accel} onChange={(v) => update("motion_accel", v)} />
-            <NumberField label="motion_velocity" description="Requested XY velocity limit." value={draft.motion_velocity} onChange={(v) => update("motion_velocity", v)} />
-            <NumberField label="motion_jerk" description="Marlin classic jerk hint." value={draft.motion_jerk} onChange={(v) => update("motion_jerk", v)} />
+          <Fieldset title={t.firmwareMotion}>
+            <NumberField label="motion_accel" description={t.motionAccelDesc} value={draft.motion_accel} onChange={(v) => update("motion_accel", v)} />
+            <NumberField label="motion_velocity" description={t.motionVelocityDesc} value={draft.motion_velocity} onChange={(v) => update("motion_velocity", v)} />
+            <NumberField label="motion_jerk" description={t.motionJerkDesc} value={draft.motion_jerk} onChange={(v) => update("motion_jerk", v)} />
           </Fieldset>
         </section>
 
         <section className="workspace">
           <div className="toolbar">
-            <button type="button" className="generate" onClick={generate} disabled={!cfg || !!error}>Generate G-code</button>
-            <button type="button" className="previewButton" onClick={preview}>Preview</button>
-            <button type="button" onClick={chooseOutput}>Choose output</button>
-            <button type="button" onClick={() => setShowGcode((v) => !v)}>{showGcode ? "Hide G-code" : "Show G-code"}</button>
+            <button type="button" className="generate" onClick={generate} disabled={!cfg || !!error}>{t.generate}</button>
+            <button type="button" className="previewButton" onClick={preview}>{t.preview}</button>
+            <button type="button" onClick={chooseOutput}>{t.chooseOutput}</button>
+            <button type="button" onClick={() => setShowGcode((v) => !v)}>{showGcode ? t.hideGcode : t.showGcode}</button>
           </div>
 
           {error && <div className="error">{error}</div>}
-          {cfg && <Preview cfg={cfg} gcode={gcode} />}
+          {cfg && <Preview cfg={cfg} gcode={gcode} language={language} />}
           <pre className="log">{logs.slice(-7).join("\n")}</pre>
           {showGcode && <textarea className="gcode" readOnly value={gcode} />}
         </section>
@@ -279,11 +417,24 @@ function NumberField({ label, description, value, onChange }: { label: string; d
   return <label className="field"><span>{label}</span>{description && <small>{description}</small>}<input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} /></label>;
 }
 
-function Select({ label, description, value, options, onChange }: { label: string; description?: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return <label className="field"><span>{label}</span>{description && <small>{description}</small>}<select value={value} onChange={(e) => onChange(e.target.value)}>{options.map((o) => <option key={o} value={o}>{o}</option>)}</select></label>;
+function Select({
+  label,
+  description,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  value: string;
+  options: Array<string | { value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return <label className="field"><span>{label}</span>{description && <small>{description}</small>}<select value={value} onChange={(e) => onChange(e.target.value)}>{options.map((o) => typeof o === "string" ? <option key={o} value={o}>{o}</option> : <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 }
 
-function Preview({ cfg, gcode }: { cfg: GeneratorConfig; gcode: string }) {
+function Preview({ cfg, gcode, language }: { cfg: GeneratorConfig; gcode: string; language: Language }) {
+  const t = translations[language];
   const data = useMemo(() => getPreviewData(cfg, gcode), [cfg, gcode]);
   const pad = 18;
   const vb = `${-pad} ${-pad} ${data.bed.x + pad * 2} ${data.bed.y + pad * 2}`;
@@ -304,7 +455,7 @@ function Preview({ cfg, gcode }: { cfg: GeneratorConfig; gcode: string }) {
 
   return (
     <div className="previewPane">
-      <div className="previewTitle">Preview: parsed from generated G-code</div>
+      <div className="previewTitle">{t.previewTitle}</div>
       <div className="previewStage">
         <svg viewBox={vb} role="img" aria-label="MVS calibration preview">
           <rect x={0} y={0} width={data.bed.x} height={data.bed.y} className="bed" />
@@ -315,10 +466,10 @@ function Preview({ cfg, gcode }: { cfg: GeneratorConfig; gcode: string }) {
           <text x={4} y={12} className="previewText">Bed {fmt(cfg.bed_x)}x{fmt(cfg.bed_y)}</text>
           <text x={data.square.x + data.square.d / 2 - 10} y={squareTop - 6} className="previewText">D{fmt(cfg.circle_diameter)}</text>
           <text x={data.square.x} y={squareTop + data.square.d + 6} className="previewText muted">X{fmt(cfg.square_x)} Y{fmt(cfg.square_y)}</text>
-          <text x={data.bed.x - 92} y={10} className="previewText">firmware: {cfg.firmware_mode}</text>
-          <text x={data.bed.x - 92} y={20} className="previewText">stroke {fmt(cfg.label_stroke_width, 1)} / connector {fmt(cfg.label_connector_width, 1)}</text>
-          {cfg.firmware_mode === "unknown" && <text x={data.bed.x - 120} y={32} className="previewText danger">{unknownWarning}</text>}
-          {tooLarge && <text x={4} y={data.bed.y - 6} className="previewText danger">bounding square exceeds bed</text>}
+          <text x={data.bed.x - 92} y={10} className="previewText">{t.firmware}: {cfg.firmware_mode}</text>
+          <text x={data.bed.x - 92} y={20} className="previewText">{t.strokeConnector(fmt(cfg.label_stroke_width, 1), fmt(cfg.label_connector_width, 1))}</text>
+          {cfg.firmware_mode === "unknown" && <text x={data.bed.x - 120} y={32} className="previewText danger">{t.unknownWarning}</text>}
+          {tooLarge && <text x={4} y={data.bed.y - 6} className="previewText danger">{t.boundingWarning}</text>}
         </svg>
       </div>
     </div>

@@ -55,6 +55,30 @@ textarea {
   font-size: 13px;
 }
 
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.languageSwitch {
+  display: grid;
+  gap: 4px;
+  min-width: 120px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.languageSwitch span {
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.languageSwitch select {
+  width: 100%;
+}
+
 .shell {
   display: grid;
   grid-template-columns: minmax(520px, 40vw) minmax(0, 1fr);
@@ -328,6 +352,10 @@ svg {
 }
 
 @media (max-width: 900px) {
+  .headerRow {
+    flex-direction: column;
+  }
+
   .shell {
     grid-template-columns: 1fr;
   }
