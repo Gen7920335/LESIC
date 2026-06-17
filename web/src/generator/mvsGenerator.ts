@@ -580,15 +580,17 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   const blockH = lines.length * charH + Math.max(0, lines.length - 1) * lineGap;
   const topY = centerY + blockH / 2 - charH;
   const all: TypedSegment[] = [];
+  const linesGlyphs: GlyphBuild[][] = [];
 
   lines.forEach((text, li) => {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
     const glyphs = [...text].map((ch, ci) => buildGlyphGeometry(ch, xLeft + ci * advanceUnits * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
+    linesGlyphs.push(glyphs);
     glyphs.forEach((g) => all.push(...g.segments));
   });
 
-  return [...all, ...buildHullLoops(all)];
+  return [...all, ...buildInterlineRails(linesGlyphs, cell), ...buildHullLoops(all)];
 }
 
 function emitFirmwareMotionBlock(lines: string[], cfg: GeneratorConfig) {

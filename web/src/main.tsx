@@ -323,8 +323,8 @@ function App() {
       <header className="appHeader">
         <div className="headerRow">
           <div>
-            <h1>Melt / MVS Calibrator UI v21</h1>
-            <p>{t.subtitle}</p>
+            <h1>LESIC</h1>
+            <p>Lowtemp Extrusion Support Interface Calibration</p>
           </div>
           <label className="languageSwitch">
             <span>{t.language}</span>

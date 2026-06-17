@@ -1515,6 +1515,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
     top_y = center_y + block_h / 2.0 - char_h
 
     all_segments = []
+    lines_glyphs = []
     for li, text in enumerate(label_lines):
         y0 = top_y - li * (char_h + line_gap)
         line_w = widths[li]
@@ -1526,7 +1527,9 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
             geom = _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width)
             glyphs.append(geom)
             all_segments.extend(geom["segments"])
+        lines_glyphs.append(glyphs)
 
+    all_segments.extend(_build_interline_rails(lines_glyphs, cell))
     all_segments.extend(_build_hull_loops(all_segments))
 
     return all_segments, {
