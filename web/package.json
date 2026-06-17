@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "homepage": "https://Creasento.github.io/mvs_calibrator/",
+  "homepage": "https://gen7920335.github.io/LESIC/",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
