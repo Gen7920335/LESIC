@@ -9,7 +9,7 @@ from pathlib import Path
 
 LABEL_ADVANCE_UNITS = 6.8
 LABEL_GLYPH_WIDTH_UNITS = 5.0
-LABEL_LETTER_GAP_RATIO = 0.48
+LABEL_LETTER_GAP_RATIO = 0.4
 LABEL_TEXT_WIDTH = 1.0
 LABEL_OUTLINE_WIDTH = 0.25
 LABEL_INNER_OUTLINE_RADIUS = LABEL_TEXT_WIDTH / 2.0 + LABEL_OUTLINE_WIDTH / 2.0
@@ -814,9 +814,8 @@ def _txt_stroke_line_width_units(text):
 
 
 def _label_advance_units(cell, x_scale, line_width):
-    min_advance_for_width = 6 + (2 * line_width) / max(1e-6, cell * x_scale)
     target_advance = LABEL_GLYPH_WIDTH_UNITS * (1.0 + LABEL_LETTER_GAP_RATIO)
-    return max(LABEL_ADVANCE_UNITS, min_advance_for_width, target_advance)
+    return max(LABEL_ADVANCE_UNITS, target_advance)
 
 
 def _transform_stroke_point(pt, x0, y0, cell, x_scale):

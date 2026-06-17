@@ -85,7 +85,7 @@ export type PreviewData = {
 
 const LABEL_ADVANCE_UNITS = 6.8;
 const LABEL_GLYPH_WIDTH_UNITS = 5.0;
-const LABEL_LETTER_GAP_RATIO = 0.48;
+const LABEL_LETTER_GAP_RATIO = 0.4;
 const LABEL_TEXT_WIDTH = 1.0;
 const LABEL_OUTLINE_WIDTH = 0.25;
 const LABEL_INNER_OUTLINE_RADIUS = LABEL_TEXT_WIDTH / 2 + LABEL_OUTLINE_WIDTH / 2;
@@ -186,9 +186,8 @@ function filamentArea(diameter: number) {
 }
 
 function labelAdvanceUnits(cell: number, xScale: number, lineWidth: number) {
-  const minAdvanceForWidth = 6 + (2 * lineWidth) / Math.max(1e-6, cell * xScale);
   const targetAdvance = LABEL_GLYPH_WIDTH_UNITS * (1 + LABEL_LETTER_GAP_RATIO);
-  return Math.max(LABEL_ADVANCE_UNITS, minAdvanceForWidth, targetAdvance);
+  return Math.max(LABEL_ADVANCE_UNITS, targetAdvance);
 }
 
 function lineWidthUnits(text: string, advanceUnits: number) {
