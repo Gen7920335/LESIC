@@ -306,7 +306,7 @@ function buildGlyphOutline(ch: string, x0: number, y0: number, cell: number, xSc
   const maxX = Math.max(...points.map((p) => p[0]));
   const minY = Math.min(...points.map((p) => p[1]));
   const maxY = Math.max(...points.map((p) => p[1]));
-  const radii = [0.5, 1.0];
+  const radii = [1.0, 2.0];
   const sample = Math.max(0.12, lineWidth / 3);
   const all: TypedSegment[] = [];
 
@@ -370,7 +370,7 @@ function buildGlyphGeometry(ch: string, x0: number, y0: number, cell: number, xS
   const maxX = Math.max(...points.map((p) => p[0]));
   const minY = Math.min(...points.map((p) => p[1]));
   const maxY = Math.max(...points.map((p) => p[1]));
-  const radii = [0.5, 1.0];
+  const radii = [1.0, 2.0];
   const sample = Math.max(0.12, lineWidth / 3);
   const all: TypedSegment[] = [];
   let outerLoop: Point[] = [];
@@ -664,7 +664,7 @@ export function makeGcode(cfg: GeneratorConfig) {
   if (cfg.label) {
     emitTemperatureSet(lines, cfg, cfg.start_temp, "min");
     const typed = buildLabelSegments(cfg);
-    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=glyph_outer_double_contour_plus_convex_hull", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, "; label_inner_contours_per_glyph=2", "; label_outer_hull_passes=2", "; label_inner_contour_span_mm=1.0", `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.length}`, "; label_segments_connector=0");
+    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=glyph_outer_double_contour_plus_convex_hull", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, "; label_inner_contours_per_glyph=2", "; label_outer_hull_passes=2", "; label_inner_contour_span_mm=2.0", `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.length}`, "; label_segments_connector=0");
     if (typed.length) {
       const start = typed[0][0];
       lines.push(`G0 Z${fmt(cfg.layer_height)} F${fmt(cfg.z_travel_speed * 60, 1)}`);
