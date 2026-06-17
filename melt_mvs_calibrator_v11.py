@@ -1218,7 +1218,7 @@ def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
     max_x = max(p[0] for p in pts)
     min_y = min(p[1] for p in pts)
     max_y = max(p[1] for p in pts)
-    radii = [0.125, 0.25]
+    radii = [1.0, 2.0]
     sample = max(0.12, line_width / 3.0)
     all_segments = []
 
@@ -1284,7 +1284,7 @@ def _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width):
     max_x = max(p[0] for p in pts)
     min_y = min(p[1] for p in pts)
     max_y = max(p[1] for p in pts)
-    radii = [0.125, 0.25]
+    radii = [1.0, 2.0]
     sample = max(0.12, line_width / 3.0)
     all_segments = []
     outer_loop = []
@@ -1554,7 +1554,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
 
     typed_segments, info = _build_txt_shx_width_typed_segments(cfg, label_lines, char_h)
 
-    stroke_width = cfg["line_width"]
+    stroke_width = 0.25
     layer_h = cfg["layer_height"]
     stroke_count = sum(1 for _, _, k in typed_segments if k == "stroke")
     connector_count = sum(1 for _, _, k in typed_segments if k == "connector")
@@ -1566,11 +1566,11 @@ def emit_label(lines_out, cfg, label_lines, fa):
         "; label_visual_layout=three_line_default",
         "; label_path_order=line1_LTR_line2_LTR_line3_LTR",
         "; label_path_rule=stroke_only_no_connectors",
-        "; label_width_mode=line_width_only",
+        "; label_width_mode=fixed_label_width",
         f"; label_line_width={fmt(stroke_width)}",
         "; label_inner_contours_per_glyph=2",
         "; label_outer_hull_passes=2",
-        "; label_inner_contour_span_mm=0.25",
+        "; label_inner_contour_span_mm=2.0",
         f"; label_layout={cfg['label_layout']}",
         f"; label_target_height={fmt(target_h)}",
         f"; label_actual_height={fmt(char_h)}",
