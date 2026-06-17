@@ -1125,6 +1125,31 @@ def _point_key(p):
     return (round(p[0], 5), round(p[1], 5))
 
 
+def _cross(o, a, b):
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+
+def _convex_hull(points):
+    unique = list({ _point_key(p): p for p in points }.values())
+    if len(unique) <= 1:
+        return unique
+    unique.sort(key=lambda p: (p[0], p[1]))
+
+    lower = []
+    for p in unique:
+        while len(lower) >= 2 and _cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+
+    upper = []
+    for p in reversed(unique):
+        while len(upper) >= 2 and _cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+
+    return lower[:-1] + upper[:-1]
+
+
 def _extract_largest_loop(segs):
     outgoing = {}
     for a, b, _ in segs:
@@ -1180,7 +1205,7 @@ def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
     max_x = max(p[0] for p in pts)
     min_y = min(p[1] for p in pts)
     max_y = max(p[1] for p in pts)
-    radii = [line_width * 0.7, line_width * 1.7]
+    radii = [0.5, 1.0]
     sample = max(0.12, line_width / 3.0)
     all_segments = []
 
@@ -1230,6 +1255,18 @@ def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
     return all_segments
 
 
+def _build_hull_loops(segs):
+    points = [p for seg in segs for p in seg[:2]]
+    hull = _convex_hull(points)
+    if len(hull) < 3:
+        return []
+    closed = hull + [hull[0]]
+    loop = []
+    for a, b in zip(closed[:-1], closed[1:]):
+        _append_segment(loop, a, b, "stroke")
+    return loop + loop
+
+
 def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, line_width):
     """
     Glyph builder:
@@ -1269,6 +1306,8 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
             segs, _ = _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, line_width)
             all_segments.extend(segs)
 
+    all_segments.extend(_build_hull_loops(all_segments))
+
     return all_segments, {
         "cell": cell,
         "char_h": char_h,
@@ -1303,12 +1342,15 @@ def emit_label(lines_out, cfg, label_lines, fa):
     lines_out += [
         "",
         "; ---------- bottom inner label ----------",
-        "; label_toolpath=disconnected_stroke_only",
+        "; label_toolpath=glyph_outer_double_contour_plus_convex_hull",
         "; label_visual_layout=three_line_default",
         "; label_path_order=line1_LTR_line2_LTR_line3_LTR",
         "; label_path_rule=stroke_only_no_connectors",
         "; label_width_mode=line_width_only",
         f"; label_line_width={fmt(stroke_width)}",
+        "; label_inner_contours_per_glyph=2",
+        "; label_outer_hull_passes=2",
+        "; label_inner_contour_span_mm=1.0",
         f"; label_layout={cfg['label_layout']}",
         f"; label_target_height={fmt(target_h)}",
         f"; label_actual_height={fmt(char_h)}",

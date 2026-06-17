@@ -220,6 +220,30 @@ function pointKey(p: Point) {
   return `${fmt(p[0], 5)},${fmt(p[1], 5)}`;
 }
 
+function cross(o: Point, a: Point, b: Point) {
+  return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+}
+
+function convexHull(points: Point[]) {
+  const unique = Array.from(new Map(points.map((p) => [pointKey(p), p] as const)).values());
+  if (unique.length <= 1) return unique;
+  unique.sort((a, b) => a[0] === b[0] ? a[1] - b[1] : a[0] - b[0]);
+  const lower: Point[] = [];
+  for (const p of unique) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: Point[] = [];
+  for (let i = unique.length - 1; i >= 0; i--) {
+    const p = unique[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
 function extractLargestLoop(segs: TypedSegment[]) {
   const outgoing = new Map<string, Array<{ start: Point; end: Point }>>();
   segs.forEach(([a, b]) => {
@@ -277,7 +301,7 @@ function buildGlyphOutline(ch: string, x0: number, y0: number, cell: number, xSc
   const maxX = Math.max(...points.map((p) => p[0]));
   const minY = Math.min(...points.map((p) => p[1]));
   const maxY = Math.max(...points.map((p) => p[1]));
-  const radii = [lineWidth * 0.7, lineWidth * 1.7];
+  const radii = [0.5, 1.0];
   const sample = Math.max(0.12, lineWidth / 3);
   const all: TypedSegment[] = [];
 
@@ -320,6 +344,16 @@ function buildGlyphOutline(ch: string, x0: number, y0: number, cell: number, xSc
   });
 
   return all;
+}
+
+function buildHullLoops(segs: TypedSegment[]) {
+  const points = segs.flatMap(([a, b]) => [a, b]);
+  const hull = convexHull(points);
+  if (hull.length < 3) return [];
+  const closed = [...hull, hull[0]];
+  const loop: TypedSegment[] = [];
+  for (let i = 0; i < closed.length - 1; i++) appendSegment(loop, closed[i], closed[i + 1], "stroke");
+  return [...loop, ...loop];
 }
 
 function labelHeight(cfg: GeneratorConfig, lines: string[]) {
@@ -368,7 +402,7 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
     });
   });
 
-  return all;
+  return [...all, ...buildHullLoops(all)];
 }
 
 function emitFirmwareMotionBlock(lines: string[], cfg: GeneratorConfig) {
@@ -530,7 +564,7 @@ export function makeGcode(cfg: GeneratorConfig) {
   if (cfg.label) {
     emitTemperatureSet(lines, cfg, cfg.start_temp, "min");
     const typed = buildLabelSegments(cfg);
-    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=glyph_outer_double_contour", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, "; label_contours_per_glyph=2", `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.length}`, "; label_segments_connector=0");
+    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=glyph_outer_double_contour_plus_convex_hull", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, "; label_inner_contours_per_glyph=2", "; label_outer_hull_passes=2", "; label_inner_contour_span_mm=1.0", `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.length}`, "; label_segments_connector=0");
     if (typed.length) {
       const start = typed[0][0];
       lines.push(`G0 Z${fmt(cfg.layer_height)} F${fmt(cfg.z_travel_speed * 60, 1)}`);
