@@ -206,10 +206,6 @@ function buildGlyph(ch: string, x0: number, y0: number, cell: number, xScale: nu
   return { segs, start, end: pos };
 }
 
-function reverseSegments(segs: TypedSegment[]): TypedSegment[] {
-  return [...segs].reverse().map(([p0, p1, kind]) => [p1, p0, kind]);
-}
-
 function labelHeight(cfg: GeneratorConfig, lines: string[]) {
   if (cfg.label_height && cfg.label_height > 0) return cfg.label_height;
   const cellScale = cfg.label_x_scale;
@@ -252,18 +248,11 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   lines.forEach((text, li) => {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
-    const rtl = li % 2 === 1;
-    const order = rtl ? [...text].map((_, i) => text.length - 1 - i) : [...text].map((_, i) => i);
-    order.forEach((ci) => {
+    [...text].forEach((_, ci) => {
       const built = buildGlyph(text[ci], xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale);
-      let segs = built.segs;
-      let start = built.start;
-      let end = built.end;
-      if (rtl) {
-        segs = reverseSegments(segs);
-        start = built.end;
-        end = built.start;
-      }
+      const segs = built.segs;
+      const start = built.start;
+      const end = built.end;
       if (pos && start) appendSegment(all, pos, start, "connector");
       all.push(...segs);
       pos = end;

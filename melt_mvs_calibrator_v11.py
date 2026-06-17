@@ -1120,23 +1120,15 @@ def _build_glyph_segments_only(ch, x0, y0, cell, x_scale):
     return segs, start_point, pos
 
 
-def _reverse_typed_segments(segs):
-    return [(p1, p0, kind) for (p0, p1, kind) in reversed(segs)]
-
-
-def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=None, reverse=False):
+def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=None):
     """
-    v19 glyph builder:
-    - forward glyph for LTR lines
-    - reversed glyph traversal for RTL lines while visual glyph position remains unchanged
+    Glyph builder:
+    - always traverse each glyph in its native stroke order
+    - connect previous endpoint to the next glyph's true start point
     """
     segs, start, end = _build_glyph_segments_only(ch, x0, y0, cell, x_scale)
     if start is None or end is None:
         return [], current_pos
-
-    if reverse:
-        segs = _reverse_typed_segments(segs)
-        start, end = end, start
 
     out = []
     if current_pos is not None:
@@ -1147,12 +1139,9 @@ def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=None, r
 
 def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
     """
-    v19 label path:
-    - line 1: left -> right
-    - line 2: right -> left
-    - line 3: left -> right
-    - glyph positions remain visually normal
-    - traversal direction alternates by line to reduce overlap
+    Label path:
+    - all visual lines traverse left -> right
+    - each glyph must finish before the next connector begins
     """
     cell = char_h / 7.0
     x_scale = cfg.get("label_x_scale", 0.55)
@@ -1172,13 +1161,9 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
         line_w = widths[li]
         x_left = center_x - line_w / 2.0
 
-        rtl = (li % 2 == 1)
-        indices = range(len(text)-1, -1, -1) if rtl else range(len(text))
-
-        for ci in indices:
-            ch = text[ci]
+        for ci, ch in enumerate(text):
             x0 = x_left + ci * 6 * cell * x_scale
-            segs, pos = _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=pos, reverse=rtl)
+            segs, pos = _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=pos)
             all_segments.extend(segs)
 
     return all_segments, {
@@ -1186,7 +1171,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
         "char_h": char_h,
         "x_scale": x_scale,
         "widths": widths,
-        "path_order": "LTR_RTL_LTR",
+        "path_order": "LTR_LTR_LTR",
     }
 
 
@@ -1194,7 +1179,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
     """
     v19 label:
     - txt.shx-like multistroke glyphs
-    - line traversal alternates LTR/RTL/LTR
+    - line traversal is LTR/LTR/LTR
     - original glyph strokes printed with label_stroke_width
     - connectors printed with label_connector_width
     - returns the final XY point so the body can continue from label end to seam by extrusion
@@ -1221,7 +1206,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
         "; ---------- bottom inner label ----------",
         "; label_toolpath=txt_shx_multistroke_width_split_boustrophedon_connected",
         "; label_visual_layout=three_line_default",
-        "; label_path_order=line1_LTR_line2_RTL_line3_LTR",
+        "; label_path_order=line1_LTR_line2_LTR_line3_LTR",
         "; label_path_rule=stroke_end_to_next_stroke_start_and_glyph_end_to_next_glyph_start",
         "; label_width_mode=stroke_vs_connector",
         f"; label_stroke_width={fmt(stroke_width)}",
