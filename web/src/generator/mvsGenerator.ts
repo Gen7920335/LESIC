@@ -125,8 +125,8 @@ const FONT: Record<string, Point[][]> = {
   "/": [[[0, 0], [5, 7]]],
   "_": [[[0, 0], [5, 0]]],
   "-": [[[0, 3.5], [5, 3.5]]],
-  ":": [[[2.0, 5.9], [3.0, 5.9], [3.0, 5.1], [2.0, 5.1], [2.0, 5.9]], [[2.0, 1.9], [3.0, 1.9], [3.0, 1.1], [2.0, 1.1], [2.0, 1.9]]],
-  ".": [[[2.0, 0.2], [3.0, 0.2], [3.0, 1.0], [2.0, 1.0], [2.0, 0.2]]],
+  ":": [[[2.2, 5.75], [2.8, 5.75], [2.8, 5.25], [2.2, 5.25], [2.2, 5.75]], [[2.2, 1.75], [2.8, 1.75], [2.8, 1.25], [2.2, 1.25], [2.2, 1.75]]],
+  ".": [[[2.25, 0.2], [2.75, 0.2], [2.75, 0.7], [2.25, 0.7], [2.25, 0.2]]],
   "°": [[[2, 5], [2, 7], [4, 7], [4, 5], [2, 5]]],
   "³": [[[1.2, 7], [4.2, 7], [3, 5.6], [4.2, 5.6], [4.2, 4.2], [1.2, 4.2]]],
   "^": [[[0, 0], [2.5, 7], [5, 0]]],
@@ -179,8 +179,12 @@ function filamentArea(diameter: number) {
   return Math.PI * (diameter / 2) ** 2;
 }
 
-function lineWidthUnits(text: string) {
-  return Math.max(0, text.length * LABEL_ADVANCE_UNITS - (LABEL_ADVANCE_UNITS - 1));
+function labelAdvanceUnits(cell: number, xScale: number, lineWidth: number) {
+  return Math.max(LABEL_ADVANCE_UNITS, 6 + (2 * lineWidth) / Math.max(1e-6, cell * xScale));
+}
+
+function lineWidthUnits(text: string, advanceUnits: number) {
+  return Math.max(0, text.length * advanceUnits - (advanceUnits - 1));
 }
 
 function transform(p: Point, x0: number, y0: number, cell: number, xScale: number): Point {
@@ -564,7 +568,8 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   const lineGap = charH * 0.65;
   const centerX = cfg.square_x + cfg.circle_diameter / 2;
   const centerY = cfg.square_y + cfg.circle_diameter / 2;
-  const widths = lines.map((s) => lineWidthUnits(s) * cell * cfg.label_x_scale);
+  const advanceUnits = labelAdvanceUnits(cell, cfg.label_x_scale, cfg.line_width);
+  const widths = lines.map((s) => lineWidthUnits(s, advanceUnits) * cell * cfg.label_x_scale);
   const blockH = lines.length * charH + Math.max(0, lines.length - 1) * lineGap;
   const topY = centerY + blockH / 2 - charH;
   const all: TypedSegment[] = [];
@@ -573,7 +578,7 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   lines.forEach((text, li) => {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
-    const glyphs = [...text].map((ch, ci) => buildGlyphGeometry(ch, xLeft + ci * LABEL_ADVANCE_UNITS * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
+    const glyphs = [...text].map((ch, ci) => buildGlyphGeometry(ch, xLeft + ci * advanceUnits * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
     linesGlyphs.push(glyphs);
     glyphs.forEach((g) => all.push(...g.segments));
     for (let i = 0; i < glyphs.length - 1; i++) all.push(...connectAdjacentGlyphs(glyphs[i], glyphs[i + 1], cell));

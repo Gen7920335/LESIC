@@ -794,8 +794,8 @@ TXT_SHX_STROKE_FONT = {
     "/":[[(0,0),(5,7)]],
     "_":[[(0,0),(5,0)]],
     "-":[[(0,3.5),(5,3.5)]],
-    ":":[[(2.0,5.9),(3.0,5.9),(3.0,5.1),(2.0,5.1),(2.0,5.9)],[(2.0,1.9),(3.0,1.9),(3.0,1.1),(2.0,1.1),(2.0,1.9)]],
-    ".":[[(2.0,0.2),(3.0,0.2),(3.0,1.0),(2.0,1.0),(2.0,0.2)]],
+    ":":[[(2.2,5.75),(2.8,5.75),(2.8,5.25),(2.2,5.25),(2.2,5.75)],[(2.2,1.75),(2.8,1.75),(2.8,1.25),(2.2,1.25),(2.2,1.75)]],
+    ".":[[(2.25,0.2),(2.75,0.2),(2.75,0.7),(2.25,0.7),(2.25,0.2)]],
     "°":[[(2,5),(2,7),(4,7),(4,5),(2,5)]],
     "³":[[(1.2,7),(4.2,7),(3.0,5.6),(4.2,5.6),(4.2,4.2),(1.2,4.2)]],
     "^":[[(0,0),(2.5,7),(5,0)]],
@@ -805,6 +805,10 @@ TXT_SHX_STROKE_FONT = {
 
 def _txt_stroke_line_width_units(text):
     return max(0, len(text) * LABEL_ADVANCE_UNITS - (LABEL_ADVANCE_UNITS - 1))
+
+
+def _label_advance_units(cell, x_scale, line_width):
+    return max(LABEL_ADVANCE_UNITS, 6 + (2 * line_width) / max(1e-6, cell * x_scale))
 
 
 def _transform_stroke_point(pt, x0, y0, cell, x_scale):
@@ -843,11 +847,13 @@ def _build_txt_shx_exact_connect_points(cfg, label_lines, char_h):
     """
     cell = char_h / 7.0
     x_scale = cfg.get("label_x_scale", 0.55)
+    line_width = cfg.get("line_width", 0.45)
     line_gap = char_h * 0.65
     center_x = cfg["square_x"] + cfg["circle_diameter"] / 2.0
     center_y = cfg["square_y"] + cfg["circle_diameter"] / 2.0
 
-    widths = [_txt_stroke_line_width_units(s) * cell * x_scale for s in label_lines]
+    advance_units = _label_advance_units(cell, x_scale, line_width)
+    widths = [max(0, len(s) * advance_units - (advance_units - 1)) * cell * x_scale for s in label_lines]
     block_h = len(label_lines) * char_h + max(0, len(label_lines)-1) * line_gap
     top_y = center_y + block_h / 2.0 - char_h
 
@@ -1491,6 +1497,8 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
     """
     cell = char_h / 7.0
     x_scale = cfg.get("label_x_scale", 0.55)
+    line_width = cfg["line_width"]
+    advance_units = _label_advance_units(cell, x_scale, line_width)
     line_gap = char_h * 0.65
     center_x = cfg["square_x"] + cfg["circle_diameter"] / 2.0
     center_y = cfg["square_y"] + cfg["circle_diameter"] / 2.0
@@ -1500,8 +1508,6 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
     top_y = center_y + block_h / 2.0 - char_h
 
     all_segments = []
-    line_width = cfg["line_width"]
-
     lines_glyphs = []
     for li, text in enumerate(label_lines):
         y0 = top_y - li * (char_h + line_gap)
@@ -1510,7 +1516,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
 
         glyphs = []
         for ci, ch in enumerate(text):
-            x0 = x_left + ci * LABEL_ADVANCE_UNITS * cell * x_scale
+            x0 = x_left + ci * advance_units * cell * x_scale
             geom = _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width)
             glyphs.append(geom)
             all_segments.extend(geom["segments"])
