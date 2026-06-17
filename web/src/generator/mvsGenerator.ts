@@ -453,6 +453,21 @@ function candidateAllowed(a: Point, b: Point, obstacles: TypedSegment[]) {
   });
 }
 
+function shortestLoopConnector(left: GlyphBuild, right: GlyphBuild, obstacles: TypedSegment[]) {
+  let best: [Point, Point] | undefined;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const a of left.outerLoop) {
+    for (const b of right.outerLoop) {
+      const d = dist(a, b);
+      if (d >= bestDist) continue;
+      if (!candidateAllowed(a, b, obstacles)) continue;
+      best = [a, b];
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
 function connectAdjacentGlyphs(left: GlyphBuild, right: GlyphBuild, cell: number): TypedSegment[] {
   if (!left.outerLoop.length || !right.outerLoop.length) return [];
   const tol = cell * 0.7;
@@ -468,8 +483,6 @@ function connectAdjacentGlyphs(left: GlyphBuild, right: GlyphBuild, cell: number
 
   const segs: TypedSegment[] = [];
   const obstacles = [...left.segments, ...right.segments];
-  if (candidateAllowed(leftTop, rightTop, obstacles)) appendSegment(segs, leftTop, rightTop, "connector");
-  if (candidateAllowed(leftBottom, rightBottom, obstacles)) appendSegment(segs, leftBottom, rightBottom, "connector");
 
   const leftHasTop = hasCornerNear(left.sourcePoints, leftTR, tol);
   const leftHasBottom = hasCornerNear(left.sourcePoints, leftBR, tol);
@@ -478,6 +491,27 @@ function connectAdjacentGlyphs(left: GlyphBuild, right: GlyphBuild, cell: number
   if (leftHasTop && leftHasBottom && rightHasTop && rightHasBottom) {
     if (candidateAllowed(leftTop, rightBottom, obstacles)) appendSegment(segs, leftTop, rightBottom, "connector");
     if (candidateAllowed(leftBottom, rightTop, obstacles)) appendSegment(segs, leftBottom, rightTop, "connector");
+  } else {
+    const best = shortestLoopConnector(left, right, obstacles);
+    if (best) appendSegment(segs, best[0], best[1], "connector");
+  }
+  return segs;
+}
+
+function buildInterlineRails(linesGlyphs: GlyphBuild[][]) {
+  const segs: TypedSegment[] = [];
+  for (let i = 0; i < linesGlyphs.length - 1; i++) {
+    const upper = linesGlyphs[i].filter((g) => g.outerLoop.length);
+    const lower = linesGlyphs[i + 1].filter((g) => g.outerLoop.length);
+    if (!upper.length || !lower.length) continue;
+    const upperMinX = Math.min(...upper.map((g) => g.bbox.minX));
+    const upperMaxX = Math.max(...upper.map((g) => g.bbox.maxX));
+    const upperBottomY = Math.min(...upper.map((g) => g.bbox.minY));
+    const lowerMinX = Math.min(...lower.map((g) => g.bbox.minX));
+    const lowerMaxX = Math.max(...lower.map((g) => g.bbox.maxX));
+    const lowerTopY = Math.max(...lower.map((g) => g.bbox.maxY));
+    appendSegment(segs, [upperMinX, upperBottomY], [upperMaxX, upperBottomY], "connector");
+    appendSegment(segs, [lowerMinX, lowerTopY], [lowerMaxX, lowerTopY], "connector");
   }
   return segs;
 }
@@ -529,16 +563,18 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   const blockH = lines.length * charH + Math.max(0, lines.length - 1) * lineGap;
   const topY = centerY + blockH / 2 - charH;
   const all: TypedSegment[] = [];
+  const linesGlyphs: GlyphBuild[][] = [];
 
   lines.forEach((text, li) => {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
     const glyphs = [...text].map((ch, ci) => buildGlyphGeometry(ch, xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
+    linesGlyphs.push(glyphs);
     glyphs.forEach((g) => all.push(...g.segments));
     for (let i = 0; i < glyphs.length - 1; i++) all.push(...connectAdjacentGlyphs(glyphs[i], glyphs[i + 1], cell));
   });
 
-  return [...all, ...buildHullLoops(all)];
+  return [...all, ...buildInterlineRails(linesGlyphs), ...buildHullLoops(all)];
 }
 
 function emitFirmwareMotionBlock(lines: string[], cfg: GeneratorConfig) {

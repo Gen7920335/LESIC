@@ -1399,6 +1399,21 @@ def _candidate_allowed(a, b, obstacles):
     return True
 
 
+def _shortest_loop_connector(left_geom, right_geom, obstacles):
+    best = None
+    best_dist = float("inf")
+    for a in left_geom["outer_loop"]:
+        for b in right_geom["outer_loop"]:
+            d = dist(a, b)
+            if d >= best_dist:
+                continue
+            if not _candidate_allowed(a, b, obstacles):
+                continue
+            best = (a, b)
+            best_dist = d
+    return best
+
+
 def _connect_adjacent_glyphs(left_geom, right_geom, cell):
     if not left_geom["outer_loop"] or not right_geom["outer_loop"]:
         return []
@@ -1415,10 +1430,6 @@ def _connect_adjacent_glyphs(left_geom, right_geom, cell):
 
     segs = []
     obstacles = left_geom["segments"] + right_geom["segments"]
-    if _candidate_allowed(left_top, right_top, obstacles):
-        _append_segment(segs, left_top, right_top, "connector")
-    if _candidate_allowed(left_bottom, right_bottom, obstacles):
-        _append_segment(segs, left_bottom, right_bottom, "connector")
 
     left_has_top = _has_corner_near(left_geom["source_points"], left_tr, tol)
     left_has_bottom = _has_corner_near(left_geom["source_points"], left_br, tol)
@@ -1429,6 +1440,28 @@ def _connect_adjacent_glyphs(left_geom, right_geom, cell):
             _append_segment(segs, left_top, right_bottom, "connector")
         if _candidate_allowed(left_bottom, right_top, obstacles):
             _append_segment(segs, left_bottom, right_top, "connector")
+    else:
+        best = _shortest_loop_connector(left_geom, right_geom, obstacles)
+        if best:
+            _append_segment(segs, best[0], best[1], "connector")
+    return segs
+
+
+def _build_interline_rails(lines_glyphs):
+    segs = []
+    for upper_line, lower_line in zip(lines_glyphs[:-1], lines_glyphs[1:]):
+        upper = [g for g in upper_line if g["outer_loop"]]
+        lower = [g for g in lower_line if g["outer_loop"]]
+        if not upper or not lower:
+            continue
+        upper_min_x = min(g["bbox"]["min_x"] for g in upper)
+        upper_max_x = max(g["bbox"]["max_x"] for g in upper)
+        upper_bottom_y = min(g["bbox"]["min_y"] for g in upper)
+        lower_min_x = min(g["bbox"]["min_x"] for g in lower)
+        lower_max_x = max(g["bbox"]["max_x"] for g in lower)
+        lower_top_y = max(g["bbox"]["max_y"] for g in lower)
+        _append_segment(segs, (upper_min_x, upper_bottom_y), (upper_max_x, upper_bottom_y), "connector")
+        _append_segment(segs, (lower_min_x, lower_top_y), (lower_max_x, lower_top_y), "connector")
     return segs
 
 
@@ -1461,6 +1494,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
     all_segments = []
     line_width = cfg["line_width"]
 
+    lines_glyphs = []
     for li, text in enumerate(label_lines):
         y0 = top_y - li * (char_h + line_gap)
         line_w = widths[li]
@@ -1472,9 +1506,11 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
             geom = _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width)
             glyphs.append(geom)
             all_segments.extend(geom["segments"])
+        lines_glyphs.append(glyphs)
         for left_geom, right_geom in zip(glyphs[:-1], glyphs[1:]):
             all_segments.extend(_connect_adjacent_glyphs(left_geom, right_geom, cell))
 
+    all_segments.extend(_build_interline_rails(lines_glyphs))
     all_segments.extend(_build_hull_loops(all_segments))
 
     return all_segments, {
