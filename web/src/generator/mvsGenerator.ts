@@ -180,7 +180,7 @@ function filamentArea(diameter: number) {
 }
 
 function labelAdvanceUnits(cell: number, xScale: number, lineWidth: number) {
-  return Math.max(LABEL_ADVANCE_UNITS, 6 + (2 * lineWidth) / Math.max(1e-6, cell * xScale));
+  return Math.max(LABEL_ADVANCE_UNITS, 6 + (2 * lineWidth) / Math.max(1e-6, cell * xScale)) * 1.2;
 }
 
 function lineWidthUnits(text: string, advanceUnits: number) {

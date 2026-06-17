@@ -808,7 +808,7 @@ def _txt_stroke_line_width_units(text):
 
 
 def _label_advance_units(cell, x_scale, line_width):
-    return max(LABEL_ADVANCE_UNITS, 6 + (2 * line_width) / max(1e-6, cell * x_scale))
+    return max(LABEL_ADVANCE_UNITS, 6 + (2 * line_width) / max(1e-6, cell * x_scale)) * 1.2
 
 
 def _transform_stroke_point(pt, x0, y0, cell, x_scale):
