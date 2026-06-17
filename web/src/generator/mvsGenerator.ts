@@ -206,13 +206,13 @@ function buildGlyph(ch: string, x0: number, y0: number, cell: number, xScale: nu
 
     if (pos) {
       remaining.forEach((pts, index) => {
-        const forwardDistance = dist(pos, pts[0]);
+        const forwardDistance = dist(pos as Point, pts[0]);
         if (forwardDistance < bestDistance) {
           bestDistance = forwardDistance;
           bestIndex = index;
           bestReverse = false;
         }
-        const reverseDistance = dist(pos, pts[pts.length - 1]);
+        const reverseDistance = dist(pos as Point, pts[pts.length - 1]);
         if (reverseDistance < bestDistance) {
           bestDistance = reverseDistance;
           bestIndex = index;
