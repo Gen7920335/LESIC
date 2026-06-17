@@ -1094,39 +1094,149 @@ def emit_label(lines_out, cfg, label_lines, fa):
 
 def _build_glyph_segments_only(ch, x0, y0, cell, x_scale, current_pos=None):
     """
-    Build one glyph as typed stroke segments only.
-    No extra connectors between strokes.
-    Returns (segments, start_point, end_point).
+    Build one glyph centerline segments.
     """
     strokes = TXT_SHX_STROKE_FONT.get(ch.upper(), TXT_SHX_STROKE_FONT[" "])
     segs = []
-    start_point = None
-    pos = None
     for stroke in strokes:
         if not stroke:
             continue
         stroke_pts = [_transform_stroke_point(p, x0, y0, cell, x_scale) for p in stroke]
         if not stroke_pts:
             continue
-        if start_point is None:
-            start_point = stroke_pts[0]
         for a, b in zip(stroke_pts[:-1], stroke_pts[1:]):
             _append_segment(segs, a, b, "stroke")
-        pos = stroke_pts[-1]
-
-    return segs, start_point, pos
+    return segs
 
 
-def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=None):
+def _point_segment_distance(p, a, b):
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    l2 = dx*dx + dy*dy
+    if l2 <= 1e-12:
+        return dist(p, a)
+    t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2
+    t = max(0.0, min(1.0, t))
+    proj = (a[0] + t * dx, a[1] + t * dy)
+    return dist(p, proj)
+
+
+def _point_key(p):
+    return (round(p[0], 5), round(p[1], 5))
+
+
+def _extract_largest_loop(segs):
+    outgoing = {}
+    for a, b, _ in segs:
+        outgoing.setdefault(_point_key(a), []).append((a, b))
+
+    visited = set()
+    best_loop = []
+    best_area = 0.0
+
+    for a, b, _ in segs:
+        edge_id = (_point_key(a), _point_key(b))
+        if edge_id in visited:
+            continue
+        loop = [a, b]
+        visited.add(edge_id)
+        cur = b
+
+        for _ in range(20000):
+            options = outgoing.get(_point_key(cur), [])
+            nxt = None
+            for candidate in options:
+                cid = (_point_key(candidate[0]), _point_key(candidate[1]))
+                if cid not in visited:
+                    nxt = candidate
+                    break
+            if nxt is None:
+                break
+            visited.add((_point_key(nxt[0]), _point_key(nxt[1])))
+            cur = nxt[1]
+            if _point_key(cur) == _point_key(loop[0]):
+                loop.append(loop[0])
+                break
+            loop.append(cur)
+
+        if len(loop) >= 4:
+            area = 0.0
+            for p0, p1 in zip(loop[:-1], loop[1:]):
+                area += p0[0] * p1[1] - p1[0] * p0[1]
+            if abs(area) > abs(best_area):
+                best_area = area
+                best_loop = loop
+
+    return best_loop
+
+
+def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
+    centerlines = _build_glyph_segments_only(ch, x0, y0, cell, x_scale)
+    if not centerlines:
+        return []
+
+    pts = [p for seg in centerlines for p in seg[:2]]
+    min_x = min(p[0] for p in pts)
+    max_x = max(p[0] for p in pts)
+    min_y = min(p[1] for p in pts)
+    max_y = max(p[1] for p in pts)
+    radii = [line_width * 0.7, line_width * 1.7]
+    sample = max(0.12, line_width / 3.0)
+    all_segments = []
+
+    for radius in radii:
+        pad = radius + sample * 2.0
+        origin_x = min_x - pad
+        origin_y = min_y - pad
+        cols = max(1, int(math.ceil((max_x - min_x + pad * 2.0) / sample)))
+        rows = max(1, int(math.ceil((max_y - min_y + pad * 2.0) / sample)))
+        filled = [[False for _ in range(cols)] for _ in range(rows)]
+
+        for gy in range(rows):
+            for gx in range(cols):
+                p = (origin_x + (gx + 0.5) * sample, origin_y + (gy + 0.5) * sample)
+                filled[gy][gx] = any(_point_segment_distance(p, a, b) <= radius for a, b, _ in centerlines)
+
+        contour = []
+
+        def x_at(gx):
+            return origin_x + gx * sample
+
+        def y_at(gy):
+            return origin_y + gy * sample
+
+        for gy in range(rows):
+            for gx in range(cols):
+                if not filled[gy][gx]:
+                    continue
+                left_empty = gx == 0 or not filled[gy][gx - 1]
+                right_empty = gx == cols - 1 or not filled[gy][gx + 1]
+                bottom_empty = gy == 0 or not filled[gy - 1][gx]
+                top_empty = gy == rows - 1 or not filled[gy + 1][gx]
+
+                if bottom_empty:
+                    contour.append(((x_at(gx), y_at(gy)), (x_at(gx + 1), y_at(gy)), "stroke"))
+                if right_empty:
+                    contour.append(((x_at(gx + 1), y_at(gy)), (x_at(gx + 1), y_at(gy + 1)), "stroke"))
+                if top_empty:
+                    contour.append(((x_at(gx + 1), y_at(gy + 1)), (x_at(gx), y_at(gy + 1)), "stroke"))
+                if left_empty:
+                    contour.append(((x_at(gx), y_at(gy + 1)), (x_at(gx), y_at(gy)), "stroke"))
+
+        loop = _extract_largest_loop(contour)
+        for a, b in zip(loop[:-1], loop[1:]):
+            _append_segment(all_segments, a, b, "stroke")
+
+    return all_segments
+
+
+def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, line_width):
     """
     Glyph builder:
-    - stroke segments only
-    - no inter-glyph or inter-stroke connectors
+    - outer double contour only
     """
-    segs, start, end = _build_glyph_segments_only(ch, x0, y0, cell, x_scale, current_pos=current_pos)
-    if start is None or end is None:
-        return [], current_pos
-
+    segs = _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width)
+    end = segs[-1][1] if segs else None
     return segs, end
 
 
@@ -1147,7 +1257,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
     top_y = center_y + block_h / 2.0 - char_h
 
     all_segments = []
-    pos = None
+    line_width = cfg["line_width"]
 
     for li, text in enumerate(label_lines):
         y0 = top_y - li * (char_h + line_gap)
@@ -1156,7 +1266,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
 
         for ci, ch in enumerate(text):
             x0 = x_left + ci * 6 * cell * x_scale
-            segs, pos = _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=pos)
+            segs, _ = _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, line_width)
             all_segments.extend(segs)
 
     return all_segments, {

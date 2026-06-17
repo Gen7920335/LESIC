@@ -190,7 +190,18 @@ function appendSegment(out: TypedSegment[], p0: Point | undefined, p1: Point | u
   out.push([p0, p1, kind]);
 }
 
-function buildGlyph(ch: string, x0: number, y0: number, cell: number, xScale: number) {
+function pointToSegmentDistance(p: Point, a: Point, b: Point) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const l2 = dx * dx + dy * dy;
+  if (l2 <= 1e-12) return dist(p, a);
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
+  t = Math.max(0, Math.min(1, t));
+  const proj: Point = [a[0] + t * dx, a[1] + t * dy];
+  return dist(p, proj);
+}
+
+function buildGlyphCenterlines(ch: string, x0: number, y0: number, cell: number, xScale: number) {
   const strokes = FONT[ch.toUpperCase()] ?? FONT[" "];
   const segs: TypedSegment[] = [];
   for (const stroke of strokes) {
@@ -199,6 +210,116 @@ function buildGlyph(ch: string, x0: number, y0: number, cell: number, xScale: nu
     for (let i = 0; i < pts.length - 1; i++) appendSegment(segs, pts[i], pts[i + 1], "stroke");
   }
   return segs;
+}
+
+function edgeKey(a: Point, b: Point) {
+  return `${fmt(a[0], 5)},${fmt(a[1], 5)}>${fmt(b[0], 5)},${fmt(b[1], 5)}`;
+}
+
+function pointKey(p: Point) {
+  return `${fmt(p[0], 5)},${fmt(p[1], 5)}`;
+}
+
+function extractLargestLoop(segs: TypedSegment[]) {
+  const outgoing = new Map<string, Array<{ start: Point; end: Point }>>();
+  segs.forEach(([a, b]) => {
+    const key = pointKey(a);
+    const arr = outgoing.get(key) ?? [];
+    arr.push({ start: a, end: b });
+    outgoing.set(key, arr);
+  });
+
+  const visited = new Set<string>();
+  let best: Point[] = [];
+
+  segs.forEach(([a, b]) => {
+    const startEdge = edgeKey(a, b);
+    if (visited.has(startEdge)) return;
+    const loop: Point[] = [a];
+    let curA = a;
+    let curB = b;
+    visited.add(startEdge);
+    loop.push(b);
+
+    for (let guard = 0; guard < 20000; guard++) {
+      const nextOptions = outgoing.get(pointKey(curB)) ?? [];
+      const next = nextOptions.find(({ start, end }) => !visited.has(edgeKey(start, end)));
+      if (!next) break;
+      visited.add(edgeKey(next.start, next.end));
+      curA = next.start;
+      curB = next.end;
+      if (pointKey(curB) === pointKey(loop[0])) {
+        loop.push(loop[0]);
+        break;
+      }
+      loop.push(curB);
+    }
+
+    if (loop.length >= 4) {
+      let area = 0;
+      for (let i = 0; i < loop.length - 1; i++) area += loop[i][0] * loop[i + 1][1] - loop[i + 1][0] * loop[i][1];
+      if (Math.abs(area) > Math.abs(best.reduce((acc, p, i) => {
+        if (i === best.length - 1) return acc;
+        return acc + p[0] * best[i + 1][1] - best[i + 1][0] * p[1];
+      }, 0))) best = loop;
+    }
+  });
+
+  return best;
+}
+
+function buildGlyphOutline(ch: string, x0: number, y0: number, cell: number, xScale: number, lineWidth: number) {
+  const centerlines = buildGlyphCenterlines(ch, x0, y0, cell, xScale);
+  if (!centerlines.length) return [];
+
+  const points = centerlines.flatMap(([a, b]) => [a, b]);
+  const minX = Math.min(...points.map((p) => p[0]));
+  const maxX = Math.max(...points.map((p) => p[0]));
+  const minY = Math.min(...points.map((p) => p[1]));
+  const maxY = Math.max(...points.map((p) => p[1]));
+  const radii = [lineWidth * 0.7, lineWidth * 1.7];
+  const sample = Math.max(0.12, lineWidth / 3);
+  const all: TypedSegment[] = [];
+
+  radii.forEach((radius) => {
+    const pad = radius + sample * 2;
+    const originX = minX - pad;
+    const originY = minY - pad;
+    const cols = Math.max(1, Math.ceil((maxX - minX + pad * 2) / sample));
+    const rows = Math.max(1, Math.ceil((maxY - minY + pad * 2) / sample));
+    const filled: boolean[][] = Array.from({ length: rows }, () => Array<boolean>(cols).fill(false));
+
+    for (let gy = 0; gy < rows; gy++) {
+      for (let gx = 0; gx < cols; gx++) {
+        const p: Point = [originX + (gx + 0.5) * sample, originY + (gy + 0.5) * sample];
+        filled[gy][gx] = centerlines.some(([a, b]) => pointToSegmentDistance(p, a, b) <= radius);
+      }
+    }
+
+    const contour: TypedSegment[] = [];
+    const xAt = (gx: number) => originX + gx * sample;
+    const yAt = (gy: number) => originY + gy * sample;
+
+    for (let gy = 0; gy < rows; gy++) {
+      for (let gx = 0; gx < cols; gx++) {
+        if (!filled[gy][gx]) continue;
+        const leftEmpty = gx === 0 || !filled[gy][gx - 1];
+        const rightEmpty = gx === cols - 1 || !filled[gy][gx + 1];
+        const bottomEmpty = gy === 0 || !filled[gy - 1][gx];
+        const topEmpty = gy === rows - 1 || !filled[gy + 1][gx];
+
+        if (bottomEmpty) contour.push([[xAt(gx), yAt(gy)], [xAt(gx + 1), yAt(gy)], "stroke"]);
+        if (rightEmpty) contour.push([[xAt(gx + 1), yAt(gy)], [xAt(gx + 1), yAt(gy + 1)], "stroke"]);
+        if (topEmpty) contour.push([[xAt(gx + 1), yAt(gy + 1)], [xAt(gx), yAt(gy + 1)], "stroke"]);
+        if (leftEmpty) contour.push([[xAt(gx), yAt(gy + 1)], [xAt(gx), yAt(gy)], "stroke"]);
+      }
+    }
+
+    const loop = extractLargestLoop(contour);
+    for (let i = 0; i < loop.length - 1; i++) appendSegment(all, loop[i], loop[i + 1], "stroke");
+  });
+
+  return all;
 }
 
 function labelHeight(cfg: GeneratorConfig, lines: string[]) {
@@ -243,7 +364,7 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
     [...text].forEach((_, ci) => {
-      all.push(...buildGlyph(text[ci], xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale));
+      all.push(...buildGlyphOutline(text[ci], xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
     });
   });
 
@@ -409,7 +530,7 @@ export function makeGcode(cfg: GeneratorConfig) {
   if (cfg.label) {
     emitTemperatureSet(lines, cfg, cfg.start_temp, "min");
     const typed = buildLabelSegments(cfg);
-    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=disconnected_stroke_only", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.length}`, "; label_segments_connector=0");
+    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=glyph_outer_double_contour", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, "; label_contours_per_glyph=2", `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.length}`, "; label_segments_connector=0");
     if (typed.length) {
       const start = typed[0][0];
       lines.push(`G0 Z${fmt(cfg.layer_height)} F${fmt(cfg.z_travel_speed * 60, 1)}`);
