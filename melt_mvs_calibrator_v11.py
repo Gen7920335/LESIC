@@ -1456,14 +1456,17 @@ def _build_interline_rails(lines_glyphs, cell):
         lower = [g for g in lower_line if g["outer_loop"]]
         if not upper or not lower:
             continue
-        upper_min_x = min(g["bbox"]["min_x"] for g in upper)
-        upper_max_x = max(g["bbox"]["max_x"] for g in upper)
-        upper_bottom_y = min(g["bbox"]["min_y"] for g in upper)
-        lower_min_x = min(g["bbox"]["min_x"] for g in lower)
-        lower_max_x = max(g["bbox"]["max_x"] for g in lower)
-        lower_top_y = max(g["bbox"]["max_y"] for g in lower)
-        _append_segment(segs, (upper_min_x, upper_bottom_y - cell * 0.2), (upper_max_x, upper_bottom_y - cell * 0.2), "connector")
-        _append_segment(segs, (lower_min_x, lower_top_y + cell * 0.2), (lower_max_x, lower_top_y + cell * 0.2), "connector")
+        upper_pts = [p for g in upper for p in g["outer_loop"]]
+        lower_pts = [p for g in lower for p in g["outer_loop"]]
+        upper_bottom_y = min(p[1] for p in upper_pts)
+        lower_top_y = max(p[1] for p in lower_pts)
+        upper_touch_pts = [p for p in upper_pts if abs(p[1] - upper_bottom_y) < 1e-6]
+        lower_touch_pts = [p for p in lower_pts if abs(p[1] - lower_top_y) < 1e-6]
+        eps = max(0.02, cell * 0.03)
+        if len(upper_touch_pts) >= 2:
+            _append_segment(segs, (min(p[0] for p in upper_touch_pts), upper_bottom_y - eps), (max(p[0] for p in upper_touch_pts), upper_bottom_y - eps), "connector")
+        if len(lower_touch_pts) >= 2:
+            _append_segment(segs, (min(p[0] for p in lower_touch_pts), lower_top_y + eps), (max(p[0] for p in lower_touch_pts), lower_top_y + eps), "connector")
     return segs
 
 

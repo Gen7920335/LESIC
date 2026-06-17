@@ -506,14 +506,19 @@ function buildInterlineRails(linesGlyphs: GlyphBuild[][], cell: number) {
     const upper = linesGlyphs[i].filter((g) => g.outerLoop.length);
     const lower = linesGlyphs[i + 1].filter((g) => g.outerLoop.length);
     if (!upper.length || !lower.length) continue;
-    const upperMinX = Math.min(...upper.map((g) => g.bbox.minX));
-    const upperMaxX = Math.max(...upper.map((g) => g.bbox.maxX));
-    const upperBottomY = Math.min(...upper.map((g) => g.bbox.minY));
-    const lowerMinX = Math.min(...lower.map((g) => g.bbox.minX));
-    const lowerMaxX = Math.max(...lower.map((g) => g.bbox.maxX));
-    const lowerTopY = Math.max(...lower.map((g) => g.bbox.maxY));
-    appendSegment(segs, [upperMinX, upperBottomY - cell * 0.2], [upperMaxX, upperBottomY - cell * 0.2], "connector");
-    appendSegment(segs, [lowerMinX, lowerTopY + cell * 0.2], [lowerMaxX, lowerTopY + cell * 0.2], "connector");
+    const upperPts = upper.flatMap((g) => g.outerLoop);
+    const lowerPts = lower.flatMap((g) => g.outerLoop);
+    const upperBottomY = Math.min(...upperPts.map((p) => p[1]));
+    const lowerTopY = Math.max(...lowerPts.map((p) => p[1]));
+    const upperTouchPts = upperPts.filter((p) => Math.abs(p[1] - upperBottomY) < 1e-6);
+    const lowerTouchPts = lowerPts.filter((p) => Math.abs(p[1] - lowerTopY) < 1e-6);
+    const eps = Math.max(0.02, cell * 0.03);
+    if (upperTouchPts.length >= 2) {
+      appendSegment(segs, [Math.min(...upperTouchPts.map((p) => p[0])), upperBottomY - eps], [Math.max(...upperTouchPts.map((p) => p[0])), upperBottomY - eps], "connector");
+    }
+    if (lowerTouchPts.length >= 2) {
+      appendSegment(segs, [Math.min(...lowerTouchPts.map((p) => p[0])), lowerTopY + eps], [Math.max(...lowerTouchPts.map((p) => p[0])), lowerTopY + eps], "connector");
+    }
   }
   return segs;
 }
