@@ -436,8 +436,6 @@ function Preview({ cfg, gcode, language }: { cfg: GeneratorConfig; gcode: string
   const pad = 18;
   const vb = `${-pad} ${-pad} ${data.bed.x + pad * 2} ${data.bed.y + pad * 2}`;
   const mapPoint = ([x, y]: [number, number]) => [x, data.bed.y - y] as const;
-  const squareTop = data.bed.y - (data.square.y + data.square.d);
-  const seam = mapPoint(data.seam);
   const circlePaths = data.circleSegments.map(([a, b], i) => {
     const pa = mapPoint(a);
     const pb = mapPoint(b);
@@ -455,20 +453,12 @@ function Preview({ cfg, gcode, language }: { cfg: GeneratorConfig; gcode: string
       <div className="previewTitle">{t.previewTitle}</div>
       <div className="previewStage">
         <svg viewBox={vb} role="img" aria-label="MVS calibration preview">
-          <rect x={0} y={0} width={data.bed.x} height={data.bed.y} className="bed" />
-          <rect x={data.square.x} y={squareTop} width={data.square.d} height={data.square.d} className="square" />
           <g>{circlePaths}</g>
           <g>{labelPaths}</g>
-          <circle cx={seam[0]} cy={seam[1]} r={2.2} className="seam" />
-          <text x={4} y={12} className="previewText">Bed {fmt(cfg.bed_x)}x{fmt(cfg.bed_y)}</text>
-          <text x={data.square.x + data.square.d / 2 - 10} y={squareTop - 6} className="previewText">D{fmt(cfg.circle_diameter)}</text>
-          <text x={data.square.x} y={squareTop + data.square.d + 6} className="previewText muted">X{fmt(cfg.square_x)} Y{fmt(cfg.square_y)}</text>
-          <text x={data.bed.x - 92} y={10} className="previewText">{t.firmware}: {cfg.firmware_mode}</text>
-          <text x={data.bed.x - 92} y={20} className="previewText">{t.strokeWidth(fmt(cfg.line_width, 1))}</text>
-          {cfg.firmware_mode === "unknown" && <text x={data.bed.x - 120} y={32} className="previewText danger">{t.unknownWarning}</text>}
-          {tooLarge && <text x={4} y={data.bed.y - 6} className="previewText danger">{t.boundingWarning}</text>}
         </svg>
       </div>
+      {cfg.firmware_mode === "unknown" && <div className="warning">{t.unknownWarning}</div>}
+      {tooLarge && <div className="warning">{t.boundingWarning}</div>}
     </div>
   );
 }

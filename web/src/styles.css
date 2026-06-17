@@ -273,56 +273,18 @@ svg {
   background: #252525;
 }
 
-.bed {
-  fill: none;
-  stroke: #bdbdbd;
-  stroke-width: 0.7;
-}
-
-.square {
-  fill: none;
-  stroke: #7ba7db;
-  stroke-width: 0.65;
-  stroke-dasharray: 1.2 1.2;
-}
-
 .circle,
 .circleSegment {
   fill: none;
   stroke: #f0f0f0;
-  stroke-width: 0.75;
+  stroke-width: 1.2;
+  stroke-linecap: round;
 }
 
 .stroke {
   stroke: #ffffff;
-  stroke-width: 0.75;
+  stroke-width: 1.35;
   stroke-linecap: round;
-}
-
-.connector {
-  stroke: #6fa8dc;
-  stroke-width: 0.45;
-  stroke-linecap: round;
-}
-
-.seam {
-  fill: none;
-  stroke: #ffcc66;
-  stroke-width: 1.2;
-}
-
-.previewText {
-  fill: #ffffff;
-  font-family: "Segoe UI", Arial, sans-serif;
-  font-size: 4.5px;
-}
-
-.previewText.muted {
-  fill: #7fa8d6;
-}
-
-.previewText.danger {
-  fill: #ffcc66;
 }
 
 .log {
