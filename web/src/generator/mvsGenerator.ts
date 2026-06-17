@@ -580,15 +580,12 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   const blockH = lines.length * charH + Math.max(0, lines.length - 1) * lineGap;
   const topY = centerY + blockH / 2 - charH;
   const all: TypedSegment[] = [];
-  const linesGlyphs: GlyphBuild[][] = [];
 
   lines.forEach((text, li) => {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
     const glyphs = [...text].map((ch, ci) => buildGlyphGeometry(ch, xLeft + ci * advanceUnits * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
-    linesGlyphs.push(glyphs);
     glyphs.forEach((g) => all.push(...g.segments));
-    for (let i = 0; i < glyphs.length - 1; i++) all.push(...connectAdjacentGlyphs(glyphs[i], glyphs[i + 1], cell));
   });
 
   return [...all, ...buildHullLoops(all)];
