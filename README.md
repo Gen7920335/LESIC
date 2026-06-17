@@ -24,7 +24,6 @@ Lowtemp Extrusion Support Interface means printing the support-contact interface
 - `mvs_max`: `24`
 - default nozzle: `0.4 mm`
 - circular line width: automatically selected from nozzle size
-- bottom label layout: fixed `three-line`
 
 ## Supported Nozzle Sizes
 
@@ -40,3 +39,13 @@ The web UI currently supports these nozzle sizes, with automatic circular line w
 ## Intended Use
 
 LESIC is meant for users who want to tune support interface removal and supported-surface finish by testing lower interface temperatures in a controlled, repeatable print.
+
+## Real Print Examples
+
+These photos show example output and supported-surface results from actual printed samples.
+
+![Example print 1](docs/images/example_print_1.jpg)
+
+![Example print 2](docs/images/example_print_2.jpg)
+
+![Example print 3](docs/images/example_print_3.jpg)
