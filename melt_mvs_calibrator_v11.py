@@ -1218,7 +1218,7 @@ def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
     max_x = max(p[0] for p in pts)
     min_y = min(p[1] for p in pts)
     max_y = max(p[1] for p in pts)
-    radii = [1.0, 2.0]
+    radii = [0.125, 0.25]
     sample = max(0.12, line_width / 3.0)
     all_segments = []
 
@@ -1284,7 +1284,7 @@ def _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width):
     max_x = max(p[0] for p in pts)
     min_y = min(p[1] for p in pts)
     max_y = max(p[1] for p in pts)
-    radii = [1.0, 2.0]
+    radii = [0.125, 0.25]
     sample = max(0.12, line_width / 3.0)
     all_segments = []
     outer_loop = []
@@ -1570,7 +1570,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
         f"; label_line_width={fmt(stroke_width)}",
         "; label_inner_contours_per_glyph=2",
         "; label_outer_hull_passes=2",
-        "; label_inner_contour_span_mm=2.0",
+        "; label_inner_contour_span_mm=0.25",
         f"; label_layout={cfg['label_layout']}",
         f"; label_target_height={fmt(target_h)}",
         f"; label_actual_height={fmt(char_h)}",
