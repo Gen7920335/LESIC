@@ -287,6 +287,13 @@ svg {
   stroke-linecap: round;
 }
 
+.connector {
+  stroke: #7fc8ff;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: 0.95;
+}
+
 .log {
   margin: 6px 0 0;
   padding: 6px 2px;

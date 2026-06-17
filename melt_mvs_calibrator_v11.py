@@ -7,6 +7,8 @@ import json
 import math
 from pathlib import Path
 
+LABEL_ADVANCE_UNITS = 6.8
+
 
 FONT = {
     "0":["01110","10001","10011","10101","11001","10001","01110"],
@@ -802,7 +804,7 @@ TXT_SHX_STROKE_FONT = {
 
 
 def _txt_stroke_line_width_units(text):
-    return max(0, len(text) * 6 - 1)
+    return max(0, len(text) * LABEL_ADVANCE_UNITS - (LABEL_ADVANCE_UNITS - 1))
 
 
 def _transform_stroke_point(pt, x0, y0, cell, x_scale):
@@ -1447,7 +1449,7 @@ def _connect_adjacent_glyphs(left_geom, right_geom, cell):
     return segs
 
 
-def _build_interline_rails(lines_glyphs):
+def _build_interline_rails(lines_glyphs, cell):
     segs = []
     for upper_line, lower_line in zip(lines_glyphs[:-1], lines_glyphs[1:]):
         upper = [g for g in upper_line if g["outer_loop"]]
@@ -1460,8 +1462,8 @@ def _build_interline_rails(lines_glyphs):
         lower_min_x = min(g["bbox"]["min_x"] for g in lower)
         lower_max_x = max(g["bbox"]["max_x"] for g in lower)
         lower_top_y = max(g["bbox"]["max_y"] for g in lower)
-        _append_segment(segs, (upper_min_x, upper_bottom_y), (upper_max_x, upper_bottom_y), "connector")
-        _append_segment(segs, (lower_min_x, lower_top_y), (lower_max_x, lower_top_y), "connector")
+        _append_segment(segs, (upper_min_x, upper_bottom_y - cell * 0.2), (upper_max_x, upper_bottom_y - cell * 0.2), "connector")
+        _append_segment(segs, (lower_min_x, lower_top_y + cell * 0.2), (lower_max_x, lower_top_y + cell * 0.2), "connector")
     return segs
 
 
@@ -1502,7 +1504,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
 
         glyphs = []
         for ci, ch in enumerate(text):
-            x0 = x_left + ci * 6 * cell * x_scale
+            x0 = x_left + ci * LABEL_ADVANCE_UNITS * cell * x_scale
             geom = _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width)
             glyphs.append(geom)
             all_segments.extend(geom["segments"])
@@ -1510,7 +1512,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
         for left_geom, right_geom in zip(glyphs[:-1], glyphs[1:]):
             all_segments.extend(_connect_adjacent_glyphs(left_geom, right_geom, cell))
 
-    all_segments.extend(_build_interline_rails(lines_glyphs))
+    all_segments.extend(_build_interline_rails(lines_glyphs, cell))
     all_segments.extend(_build_hull_loops(all_segments))
 
     return all_segments, {

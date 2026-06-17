@@ -83,6 +83,8 @@ export type PreviewData = {
   totalHeight: number;
 };
 
+const LABEL_ADVANCE_UNITS = 6.8;
+
 const FONT: Record<string, Point[][]> = {
   "0": [[ [0, 0], [0, 7], [5, 7], [5, 0], [0, 0], [5, 7] ]],
   "1": [[ [2.5, 0], [2.5, 7] ], [[1.2, 5.8], [2.5, 7]], [[1, 0], [4, 0]]],
@@ -178,7 +180,7 @@ function filamentArea(diameter: number) {
 }
 
 function lineWidthUnits(text: string) {
-  return Math.max(0, text.length * 6 - 1);
+  return Math.max(0, text.length * LABEL_ADVANCE_UNITS - (LABEL_ADVANCE_UNITS - 1));
 }
 
 function transform(p: Point, x0: number, y0: number, cell: number, xScale: number): Point {
@@ -498,7 +500,7 @@ function connectAdjacentGlyphs(left: GlyphBuild, right: GlyphBuild, cell: number
   return segs;
 }
 
-function buildInterlineRails(linesGlyphs: GlyphBuild[][]) {
+function buildInterlineRails(linesGlyphs: GlyphBuild[][], cell: number) {
   const segs: TypedSegment[] = [];
   for (let i = 0; i < linesGlyphs.length - 1; i++) {
     const upper = linesGlyphs[i].filter((g) => g.outerLoop.length);
@@ -510,8 +512,8 @@ function buildInterlineRails(linesGlyphs: GlyphBuild[][]) {
     const lowerMinX = Math.min(...lower.map((g) => g.bbox.minX));
     const lowerMaxX = Math.max(...lower.map((g) => g.bbox.maxX));
     const lowerTopY = Math.max(...lower.map((g) => g.bbox.maxY));
-    appendSegment(segs, [upperMinX, upperBottomY], [upperMaxX, upperBottomY], "connector");
-    appendSegment(segs, [lowerMinX, lowerTopY], [lowerMaxX, lowerTopY], "connector");
+    appendSegment(segs, [upperMinX, upperBottomY - cell * 0.2], [upperMaxX, upperBottomY - cell * 0.2], "connector");
+    appendSegment(segs, [lowerMinX, lowerTopY + cell * 0.2], [lowerMaxX, lowerTopY + cell * 0.2], "connector");
   }
   return segs;
 }
@@ -568,13 +570,13 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   lines.forEach((text, li) => {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
-    const glyphs = [...text].map((ch, ci) => buildGlyphGeometry(ch, xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
+    const glyphs = [...text].map((ch, ci) => buildGlyphGeometry(ch, xLeft + ci * LABEL_ADVANCE_UNITS * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
     linesGlyphs.push(glyphs);
     glyphs.forEach((g) => all.push(...g.segments));
     for (let i = 0; i < glyphs.length - 1; i++) all.push(...connectAdjacentGlyphs(glyphs[i], glyphs[i + 1], cell));
   });
 
-  return [...all, ...buildInterlineRails(linesGlyphs), ...buildHullLoops(all)];
+  return [...all, ...buildInterlineRails(linesGlyphs, cell), ...buildHullLoops(all)];
 }
 
 function emitFirmwareMotionBlock(lines: string[], cfg: GeneratorConfig) {
