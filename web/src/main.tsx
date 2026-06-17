@@ -16,6 +16,20 @@ import "./styles.css";
 
 const presets = presetsJson as Record<string, PrinterPreset>;
 const presetNames = Object.keys(presets).sort();
+const nozzleOptions = [0.8, 0.6, 0.4, 0.25, 0.2, 0.15] as const;
+const optimalLineWidthByNozzle: Record<number, number> = {
+  0.8: 0.96,
+  0.6: 0.72,
+  0.4: 0.48,
+  0.25: 0.3,
+  0.2: 0.24,
+  0.15: 0.18,
+};
+
+function optimalLineWidth(nozzleSize: number) {
+  return optimalLineWidthByNozzle[nozzleSize] ?? Math.max(0.18, nozzleSize * 1.2);
+}
+
 type Language = "ko" | "en";
 const translations = {
   en: {
@@ -138,6 +152,7 @@ type Draft = {
   printer_preset: string;
   firmware_mode: FirmwareMode;
   filament_name: string;
+  nozzle_size: number;
   start_temp: number;
   end_temp: number;
   temp_step: number;
@@ -147,7 +162,6 @@ type Draft = {
   bed_x: string;
   bed_y: string;
   layer_height: number;
-  line_width: number;
   mvs_min: number;
   mvs_max: number;
   arc_segments: number;
@@ -155,7 +169,6 @@ type Draft = {
   square_y: string;
   circle_diameter: string;
   label: boolean;
-  label_layout: "three-line" | "one-line";
   label_height: string;
   label_x_scale: number;
   label_stroke_width: number;
@@ -181,6 +194,7 @@ const initialDraft: Draft = {
   printer_preset: defaultPreset,
   firmware_mode: inferFirmwareMode(defaultPreset),
   filament_name: "Unknown_pla",
+  nozzle_size: 0.4,
   start_temp: 210,
   end_temp: 165,
   temp_step: 1,
@@ -190,15 +204,13 @@ const initialDraft: Draft = {
   bed_x: "",
   bed_y: "",
   layer_height: 0.24,
-  line_width: 0.45,
-  mvs_min: 0.1,
-  mvs_max: 20,
+  mvs_min: 8,
+  mvs_max: 24,
   arc_segments: 360,
   square_x: "",
   square_y: "",
   circle_diameter: "",
   label: true,
-  label_layout: "three-line",
   label_height: "",
   label_x_scale: 0.55,
   label_stroke_width: 0.6,
@@ -237,7 +249,8 @@ function buildConfig(draft: Draft): GeneratorConfig {
     output: draft.output || "mvs_calibrator.gcode",
     printer_name: preset.printer_name ?? draft.printer_preset,
     source: preset.source ?? "",
-    nozzle_size: preset.nozzle_size ?? 0.4,
+    nozzle_size: draft.nozzle_size,
+    line_width: optimalLineWidth(draft.nozzle_size),
     bed_x: bedX,
     bed_y: bedY,
     bed_z: preset.bed_z ?? 0,
@@ -250,6 +263,7 @@ function buildConfig(draft: Draft): GeneratorConfig {
     standalone: true,
     bands,
     filament_diameter: preset.filament_diameter ?? 1.75,
+    label_layout: "three-line",
     label_height: draft.label_height.trim() === "" ? undefined : numberOr(draft.label_height, 0),
     label_margin: 6,
     retract_speed: 30,
@@ -332,6 +346,13 @@ function App() {
           <Fieldset title={t.printer}>
             <Select label="printer_preset" description={t.printerPresetDesc} value={draft.printer_preset} options={presetNames} onChange={selectPreset} />
             <Select label="firmware_mode" description={t.firmwareModeDesc} value={draft.firmware_mode} options={["klipper", "marlin", "bambu", "unknown"]} onChange={(v) => update("firmware_mode", v as FirmwareMode)} />
+            <Select
+              label="nozzle_size"
+              description={language === "ko" ? "지원 노즐 구경 중 하나를 선택합니다. 원형 테스트 선폭은 자동으로 설정됩니다." : "Choose one supported nozzle size. Circular line width is set automatically."}
+              value={String(draft.nozzle_size)}
+              options={nozzleOptions.map((v) => ({ value: String(v), label: `${fmt(v, 2)} mm` }))}
+              onChange={(v) => update("nozzle_size", Number(v))}
+            />
             <TextField label="filament_name" description={t.filamentNameDesc} value={draft.filament_name} onChange={(v) => update("filament_name", v)} />
           </Fieldset>
 
@@ -345,7 +366,6 @@ function App() {
 
           <Fieldset title={t.geometry}>
             <NumberField label="layer_height" description={t.layerHeightDesc} value={draft.layer_height} onChange={(v) => update("layer_height", v)} />
-            <NumberField label="line_width" description={t.lineWidthDesc} value={draft.line_width} onChange={(v) => update("line_width", v)} />
             <NumberField label="mvs_min" description={t.mvsMinDesc} value={draft.mvs_min} onChange={(v) => update("mvs_min", v)} />
             <NumberField label="mvs_max" description={t.mvsMaxDesc} value={draft.mvs_max} onChange={(v) => update("mvs_max", v)} />
             <NumberField label="arc_segments" description={t.arcSegmentsDesc} value={draft.arc_segments} onChange={(v) => update("arc_segments", Math.max(12, Math.round(v)))} />
@@ -364,16 +384,6 @@ function App() {
 
           <Fieldset title={t.label}>
             <label className="check"><input type="checkbox" checked={draft.label} onChange={(e) => update("label", e.target.checked)} /> {t.labelEnabled}</label>
-            <Select
-              label="label_layout"
-              description={t.labelLayoutDesc}
-              value={draft.label_layout}
-              options={[
-                { value: "three-line", label: t.threeLine },
-                { value: "one-line", label: t.oneLine },
-              ]}
-              onChange={(v) => update("label_layout", v as Draft["label_layout"])}
-            />
             <TextField label="label_height" description={t.labelHeightDesc} value={draft.label_height} onChange={(v) => update("label_height", v)} placeholder={t.autoPlaceholder} />
           </Fieldset>
 
