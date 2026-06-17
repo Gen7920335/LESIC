@@ -10,6 +10,8 @@ LESIC is a standalone G-code generator for calibrating low-temperature support i
 
 Lowtemp Extrusion Support Interface means printing the support-contact interface at a lower nozzle temperature than the main part. The goal is to reduce bonding strength between support and model so supports separate more cleanly, while still keeping acceptable underside surface quality.
 
+Even when the model and the support are printed with the same material, this approach can be used to fine-tune interface adhesion so the support still separates cleanly without making the supported surface excessively rough.
+
 ## What LESIC Does
 
 - Generates standalone calibration G-code
@@ -39,6 +41,17 @@ The web UI currently supports these nozzle sizes, with automatic circular line w
 ## Intended Use
 
 LESIC is meant for users who want to tune support interface removal and supported-surface finish by testing lower interface temperatures in a controlled, repeatable print.
+
+## Recommended Print Conditions
+
+For best comparison results, keep the surrounding support settings as consistent as possible. In OrcaSlicer, use the matching support-interface settings below:
+
+- `Support expansion`: `1 mm` or more
+- `Fan speed / Cooling`: keep at `100%`
+- `Top interface spacing`: `0`
+- `Top interface pattern`: `Rectilinear Interlaced`
+- `Top interface pattern angle`: `22.5`
+- `Top interface layers`: `4`
 
 ## Real Print Examples
 
