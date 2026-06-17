@@ -1353,6 +1353,52 @@ def _has_corner_near(points, target, tol):
     return any(dist(p, target) <= tol for p in points)
 
 
+def _same_point(a, b, tol=1e-6):
+    return dist(a, b) <= tol
+
+
+def _orientation(a, b, c):
+    v = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
+    if abs(v) < 1e-9:
+        return 0
+    return 1 if v > 0 else 2
+
+
+def _on_segment(a, b, c):
+    return (
+        b[0] <= max(a[0], c[0]) + 1e-9 and b[0] + 1e-9 >= min(a[0], c[0]) and
+        b[1] <= max(a[1], c[1]) + 1e-9 and b[1] + 1e-9 >= min(a[1], c[1])
+    )
+
+
+def _segments_intersect(a1, a2, b1, b2):
+    o1 = _orientation(a1, a2, b1)
+    o2 = _orientation(a1, a2, b2)
+    o3 = _orientation(b1, b2, a1)
+    o4 = _orientation(b1, b2, a2)
+    if o1 != o2 and o3 != o4:
+        return True
+    if o1 == 0 and _on_segment(a1, b1, a2):
+        return True
+    if o2 == 0 and _on_segment(a1, b2, a2):
+        return True
+    if o3 == 0 and _on_segment(b1, a1, b2):
+        return True
+    if o4 == 0 and _on_segment(b1, a2, b2):
+        return True
+    return False
+
+
+def _candidate_allowed(a, b, obstacles):
+    for p0, p1, _ in obstacles:
+        shares_endpoint = _same_point(a, p0) or _same_point(a, p1) or _same_point(b, p0) or _same_point(b, p1)
+        if not _segments_intersect(a, b, p0, p1):
+            continue
+        if not shares_endpoint:
+            return False
+    return True
+
+
 def _connect_adjacent_glyphs(left_geom, right_geom, cell):
     if not left_geom["outer_loop"] or not right_geom["outer_loop"]:
         return []
@@ -1368,16 +1414,21 @@ def _connect_adjacent_glyphs(left_geom, right_geom, cell):
     right_bottom = _nearest_loop_point(right_geom["outer_loop"], right_bl)
 
     segs = []
-    _append_segment(segs, left_top, right_top, "stroke")
-    _append_segment(segs, left_bottom, right_bottom, "stroke")
+    obstacles = left_geom["segments"] + right_geom["segments"]
+    if _candidate_allowed(left_top, right_top, obstacles):
+        _append_segment(segs, left_top, right_top, "stroke")
+    if _candidate_allowed(left_bottom, right_bottom, obstacles):
+        _append_segment(segs, left_bottom, right_bottom, "stroke")
 
     left_has_top = _has_corner_near(left_geom["source_points"], left_tr, tol)
     left_has_bottom = _has_corner_near(left_geom["source_points"], left_br, tol)
     right_has_top = _has_corner_near(right_geom["source_points"], right_tl, tol)
     right_has_bottom = _has_corner_near(right_geom["source_points"], right_bl, tol)
     if left_has_top and left_has_bottom and right_has_top and right_has_bottom:
-        _append_segment(segs, left_top, right_bottom, "stroke")
-        _append_segment(segs, left_bottom, right_top, "stroke")
+        if _candidate_allowed(left_top, right_bottom, obstacles):
+            _append_segment(segs, left_top, right_bottom, "stroke")
+        if _candidate_allowed(left_bottom, right_top, obstacles):
+            _append_segment(segs, left_bottom, right_top, "stroke")
     return segs
 
 

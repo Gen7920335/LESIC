@@ -418,6 +418,41 @@ function hasCornerNear(points: Point[], target: Point, tol: number) {
   return points.some((p) => dist(p, target) <= tol);
 }
 
+function samePoint(a: Point, b: Point, tol = 1e-6) {
+  return dist(a, b) <= tol;
+}
+
+function orientation(a: Point, b: Point, c: Point) {
+  const v = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1]);
+  if (Math.abs(v) < 1e-9) return 0;
+  return v > 0 ? 1 : 2;
+}
+
+function onSegment(a: Point, b: Point, c: Point) {
+  return b[0] <= Math.max(a[0], c[0]) + 1e-9 && b[0] + 1e-9 >= Math.min(a[0], c[0]) && b[1] <= Math.max(a[1], c[1]) + 1e-9 && b[1] + 1e-9 >= Math.min(a[1], c[1]);
+}
+
+function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point) {
+  const o1 = orientation(a1, a2, b1);
+  const o2 = orientation(a1, a2, b2);
+  const o3 = orientation(b1, b2, a1);
+  const o4 = orientation(b1, b2, a2);
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && onSegment(a1, b1, a2)) return true;
+  if (o2 === 0 && onSegment(a1, b2, a2)) return true;
+  if (o3 === 0 && onSegment(b1, a1, b2)) return true;
+  if (o4 === 0 && onSegment(b1, a2, b2)) return true;
+  return false;
+}
+
+function candidateAllowed(a: Point, b: Point, obstacles: TypedSegment[]) {
+  return obstacles.every(([p0, p1]) => {
+    const sharesEndpoint = samePoint(a, p0) || samePoint(a, p1) || samePoint(b, p0) || samePoint(b, p1);
+    if (!segmentsIntersect(a, b, p0, p1)) return true;
+    return sharesEndpoint;
+  });
+}
+
 function connectAdjacentGlyphs(left: GlyphBuild, right: GlyphBuild, cell: number): TypedSegment[] {
   if (!left.outerLoop.length || !right.outerLoop.length) return [];
   const tol = cell * 0.7;
@@ -432,16 +467,17 @@ function connectAdjacentGlyphs(left: GlyphBuild, right: GlyphBuild, cell: number
   const rightBottom = nearestLoopPoint(right.outerLoop, rightBL);
 
   const segs: TypedSegment[] = [];
-  appendSegment(segs, leftTop, rightTop, "stroke");
-  appendSegment(segs, leftBottom, rightBottom, "stroke");
+  const obstacles = [...left.segments, ...right.segments];
+  if (candidateAllowed(leftTop, rightTop, obstacles)) appendSegment(segs, leftTop, rightTop, "stroke");
+  if (candidateAllowed(leftBottom, rightBottom, obstacles)) appendSegment(segs, leftBottom, rightBottom, "stroke");
 
   const leftHasTop = hasCornerNear(left.sourcePoints, leftTR, tol);
   const leftHasBottom = hasCornerNear(left.sourcePoints, leftBR, tol);
   const rightHasTop = hasCornerNear(right.sourcePoints, rightTL, tol);
   const rightHasBottom = hasCornerNear(right.sourcePoints, rightBL, tol);
   if (leftHasTop && leftHasBottom && rightHasTop && rightHasBottom) {
-    appendSegment(segs, leftTop, rightBottom, "stroke");
-    appendSegment(segs, leftBottom, rightTop, "stroke");
+    if (candidateAllowed(leftTop, rightBottom, obstacles)) appendSegment(segs, leftTop, rightBottom, "stroke");
+    if (candidateAllowed(leftBottom, rightTop, obstacles)) appendSegment(segs, leftBottom, rightTop, "stroke");
   }
   return segs;
 }
