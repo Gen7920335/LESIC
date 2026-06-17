@@ -84,8 +84,10 @@ export type PreviewData = {
 };
 
 const LABEL_ADVANCE_UNITS = 6.8;
+const LABEL_TEXT_WIDTH = 1.0;
 const LABEL_OUTLINE_WIDTH = 0.25;
-const LABEL_OUTER_RADIUS = 2.0;
+const LABEL_INNER_OUTLINE_RADIUS = LABEL_TEXT_WIDTH / 2 + LABEL_OUTLINE_WIDTH / 2;
+const LABEL_OUTER_RADIUS = LABEL_INNER_OUTLINE_RADIUS + LABEL_OUTLINE_WIDTH;
 
 const FONT: Record<string, Point[][]> = {
   "0": [[ [0, 0], [0, 7], [5, 7], [5, 0], [0, 0], [5, 7] ]],
@@ -314,7 +316,7 @@ function buildGlyphOutline(ch: string, x0: number, y0: number, cell: number, xSc
   const maxX = Math.max(...points.map((p) => p[0]));
   const minY = Math.min(...points.map((p) => p[1]));
   const maxY = Math.max(...points.map((p) => p[1]));
-  const radii = [LABEL_OUTER_RADIUS - LABEL_OUTLINE_WIDTH, LABEL_OUTER_RADIUS];
+  const radii = [LABEL_INNER_OUTLINE_RADIUS, LABEL_OUTER_RADIUS];
   const sample = Math.max(0.12, lineWidth / 3);
   const all: TypedSegment[] = [];
 
@@ -378,7 +380,7 @@ function buildGlyphGeometry(ch: string, x0: number, y0: number, cell: number, xS
   const maxX = Math.max(...points.map((p) => p[0]));
   const minY = Math.min(...points.map((p) => p[1]));
   const maxY = Math.max(...points.map((p) => p[1]));
-  const radii = [LABEL_OUTER_RADIUS - LABEL_OUTLINE_WIDTH, LABEL_OUTER_RADIUS];
+  const radii = [LABEL_INNER_OUTLINE_RADIUS, LABEL_OUTER_RADIUS];
   const sample = Math.max(0.12, lineWidth / 3);
   const all: TypedSegment[] = [];
   let outerLoop: Point[] = [];

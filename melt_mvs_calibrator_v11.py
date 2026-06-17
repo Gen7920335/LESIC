@@ -8,8 +8,10 @@ import math
 from pathlib import Path
 
 LABEL_ADVANCE_UNITS = 6.8
+LABEL_TEXT_WIDTH = 1.0
 LABEL_OUTLINE_WIDTH = 0.25
-LABEL_OUTER_RADIUS = 2.0
+LABEL_INNER_OUTLINE_RADIUS = LABEL_TEXT_WIDTH / 2.0 + LABEL_OUTLINE_WIDTH / 2.0
+LABEL_OUTER_RADIUS = LABEL_INNER_OUTLINE_RADIUS + LABEL_OUTLINE_WIDTH
 
 
 FONT = {
@@ -1220,7 +1222,7 @@ def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
     max_x = max(p[0] for p in pts)
     min_y = min(p[1] for p in pts)
     max_y = max(p[1] for p in pts)
-    radii = [LABEL_OUTER_RADIUS - LABEL_OUTLINE_WIDTH, LABEL_OUTER_RADIUS]
+    radii = [LABEL_INNER_OUTLINE_RADIUS, LABEL_OUTER_RADIUS]
     sample = max(0.12, line_width / 3.0)
     all_segments = []
 
@@ -1286,7 +1288,7 @@ def _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width):
     max_x = max(p[0] for p in pts)
     min_y = min(p[1] for p in pts)
     max_y = max(p[1] for p in pts)
-    radii = [LABEL_OUTER_RADIUS - LABEL_OUTLINE_WIDTH, LABEL_OUTER_RADIUS]
+    radii = [LABEL_INNER_OUTLINE_RADIUS, LABEL_OUTER_RADIUS]
     sample = max(0.12, line_width / 3.0)
     all_segments = []
     outer_loop = []
