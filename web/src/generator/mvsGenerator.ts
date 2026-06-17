@@ -449,9 +449,9 @@ function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point) {
 
 function candidateAllowed(a: Point, b: Point, obstacles: TypedSegment[]) {
   return obstacles.every(([p0, p1]) => {
-    const sharesEndpoint = samePoint(a, p0) || samePoint(a, p1) || samePoint(b, p0) || samePoint(b, p1);
+    const touchesAtEnd = samePoint(a, p0) || samePoint(a, p1) || samePoint(b, p0) || samePoint(b, p1) || onSegment(p0, a, p1) || onSegment(p0, b, p1);
     if (!segmentsIntersect(a, b, p0, p1)) return true;
-    return sharesEndpoint;
+    return touchesAtEnd;
   });
 }
 
@@ -508,17 +508,15 @@ function buildInterlineRails(linesGlyphs: GlyphBuild[][], cell: number) {
     if (!upper.length || !lower.length) continue;
     const upperPts = upper.flatMap((g) => g.outerLoop);
     const lowerPts = lower.flatMap((g) => g.outerLoop);
+    const upperMinX = Math.min(...upperPts.map((p) => p[0]));
+    const upperMaxX = Math.max(...upperPts.map((p) => p[0]));
     const upperBottomY = Math.min(...upperPts.map((p) => p[1]));
+    const lowerMinX = Math.min(...lowerPts.map((p) => p[0]));
+    const lowerMaxX = Math.max(...lowerPts.map((p) => p[0]));
     const lowerTopY = Math.max(...lowerPts.map((p) => p[1]));
-    const upperTouchPts = upperPts.filter((p) => Math.abs(p[1] - upperBottomY) < 1e-6);
-    const lowerTouchPts = lowerPts.filter((p) => Math.abs(p[1] - lowerTopY) < 1e-6);
     const eps = Math.max(0.02, cell * 0.03);
-    if (upperTouchPts.length >= 2) {
-      appendSegment(segs, [Math.min(...upperTouchPts.map((p) => p[0])), upperBottomY - eps], [Math.max(...upperTouchPts.map((p) => p[0])), upperBottomY - eps], "connector");
-    }
-    if (lowerTouchPts.length >= 2) {
-      appendSegment(segs, [Math.min(...lowerTouchPts.map((p) => p[0])), lowerTopY + eps], [Math.max(...lowerTouchPts.map((p) => p[0])), lowerTopY + eps], "connector");
-    }
+    appendSegment(segs, [upperMinX, upperBottomY - eps], [upperMaxX, upperBottomY - eps], "connector");
+    appendSegment(segs, [lowerMinX, lowerTopY + eps], [lowerMaxX, lowerTopY + eps], "connector");
   }
   return segs;
 }

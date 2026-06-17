@@ -1393,10 +1393,13 @@ def _segments_intersect(a1, a2, b1, b2):
 
 def _candidate_allowed(a, b, obstacles):
     for p0, p1, _ in obstacles:
-        shares_endpoint = _same_point(a, p0) or _same_point(a, p1) or _same_point(b, p0) or _same_point(b, p1)
+        touches_at_end = (
+            _same_point(a, p0) or _same_point(a, p1) or _same_point(b, p0) or _same_point(b, p1) or
+            _on_segment(p0, a, p1) or _on_segment(p0, b, p1)
+        )
         if not _segments_intersect(a, b, p0, p1):
             continue
-        if not shares_endpoint:
+        if not touches_at_end:
             return False
     return True
 
@@ -1458,15 +1461,15 @@ def _build_interline_rails(lines_glyphs, cell):
             continue
         upper_pts = [p for g in upper for p in g["outer_loop"]]
         lower_pts = [p for g in lower for p in g["outer_loop"]]
+        upper_min_x = min(p[0] for p in upper_pts)
+        upper_max_x = max(p[0] for p in upper_pts)
         upper_bottom_y = min(p[1] for p in upper_pts)
+        lower_min_x = min(p[0] for p in lower_pts)
+        lower_max_x = max(p[0] for p in lower_pts)
         lower_top_y = max(p[1] for p in lower_pts)
-        upper_touch_pts = [p for p in upper_pts if abs(p[1] - upper_bottom_y) < 1e-6]
-        lower_touch_pts = [p for p in lower_pts if abs(p[1] - lower_top_y) < 1e-6]
         eps = max(0.02, cell * 0.03)
-        if len(upper_touch_pts) >= 2:
-            _append_segment(segs, (min(p[0] for p in upper_touch_pts), upper_bottom_y - eps), (max(p[0] for p in upper_touch_pts), upper_bottom_y - eps), "connector")
-        if len(lower_touch_pts) >= 2:
-            _append_segment(segs, (min(p[0] for p in lower_touch_pts), lower_top_y + eps), (max(p[0] for p in lower_touch_pts), lower_top_y + eps), "connector")
+        _append_segment(segs, (upper_min_x, upper_bottom_y - eps), (upper_max_x, upper_bottom_y - eps), "connector")
+        _append_segment(segs, (lower_min_x, lower_top_y + eps), (lower_max_x, lower_top_y + eps), "connector")
     return segs
 
 
