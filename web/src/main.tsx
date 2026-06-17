@@ -54,8 +54,7 @@ const translations = {
     placementDesc: "Empty uses automatic placement.",
     labelLayoutDesc: "Bottom label layout.",
     labelHeightDesc: "Empty uses auto-fit.",
-    labelStrokeDesc: "Extrusion width for glyph strokes.",
-    labelConnectorDesc: "Extrusion width for label connectors.",
+    labelStrokeDesc: "Label outline width. Actual output follows the test print line width.",
     motionAccelDesc: "Requested acceleration.",
     motionVelocityDesc: "Requested XY velocity limit.",
     motionJerkDesc: "Marlin classic jerk hint.",
@@ -68,7 +67,7 @@ const translations = {
     hideGcode: "Hide G-code",
     previewTitle: "Preview: parsed from generated G-code",
     firmware: "firmware",
-    strokeConnector: (stroke: string, connector: string) => `stroke ${stroke} / connector ${connector}`,
+    strokeWidth: (stroke: string) => `label width ${stroke}`,
     boundingWarning: "bounding square exceeds bed",
     language: "Language",
     labelEnabled: "label",
@@ -125,7 +124,7 @@ const translations = {
     hideGcode: "G-code 숨기기",
     previewTitle: "Preview: 생성된 G-code 기준",
     firmware: "firmware",
-    strokeConnector: (stroke: string, connector: string) => `stroke ${stroke} / connector ${connector}`,
+    strokeWidth: (stroke: string) => `label width ${stroke}`,
     boundingWarning: "바운딩 사각형이 베드를 벗어납니다",
     language: "언어",
     labelEnabled: "label",
@@ -182,8 +181,8 @@ const initialDraft: Draft = {
   printer_preset: defaultPreset,
   firmware_mode: inferFirmwareMode(defaultPreset),
   filament_name: "Unknown_pla",
-  start_temp: 230,
-  end_temp: 176,
+  start_temp: 210,
+  end_temp: 165,
   temp_step: 1,
   layers_per_band: 10,
   bed_temp: 60,
@@ -376,8 +375,6 @@ function App() {
               onChange={(v) => update("label_layout", v as Draft["label_layout"])}
             />
             <TextField label="label_height" description={t.labelHeightDesc} value={draft.label_height} onChange={(v) => update("label_height", v)} placeholder={t.autoPlaceholder} />
-            <NumberField label="label_stroke_width" description={t.labelStrokeDesc} value={draft.label_stroke_width} onChange={(v) => update("label_stroke_width", v)} />
-            <NumberField label="label_connector_width" description={t.labelConnectorDesc} value={draft.label_connector_width} onChange={(v) => update("label_connector_width", v)} />
           </Fieldset>
 
           <Fieldset title={t.firmwareMotion}>
@@ -467,7 +464,7 @@ function Preview({ cfg, gcode, language }: { cfg: GeneratorConfig; gcode: string
           <text x={data.square.x + data.square.d / 2 - 10} y={squareTop - 6} className="previewText">D{fmt(cfg.circle_diameter)}</text>
           <text x={data.square.x} y={squareTop + data.square.d + 6} className="previewText muted">X{fmt(cfg.square_x)} Y{fmt(cfg.square_y)}</text>
           <text x={data.bed.x - 92} y={10} className="previewText">{t.firmware}: {cfg.firmware_mode}</text>
-          <text x={data.bed.x - 92} y={20} className="previewText">{t.strokeConnector(fmt(cfg.label_stroke_width, 1), fmt(cfg.label_connector_width, 1))}</text>
+          <text x={data.bed.x - 92} y={20} className="previewText">{t.strokeWidth(fmt(cfg.line_width, 1))}</text>
           {cfg.firmware_mode === "unknown" && <text x={data.bed.x - 120} y={32} className="previewText danger">{t.unknownWarning}</text>}
           {tooLarge && <text x={4} y={data.bed.y - 6} className="previewText danger">{t.boundingWarning}</text>}
         </svg>

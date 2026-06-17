@@ -190,46 +190,15 @@ function appendSegment(out: TypedSegment[], p0: Point | undefined, p1: Point | u
   out.push([p0, p1, kind]);
 }
 
-function buildGlyph(ch: string, x0: number, y0: number, cell: number, xScale: number, currentPos?: Point) {
+function buildGlyph(ch: string, x0: number, y0: number, cell: number, xScale: number) {
   const strokes = FONT[ch.toUpperCase()] ?? FONT[" "];
   const segs: TypedSegment[] = [];
-  const remaining = strokes
-    .map((stroke) => stroke.map((p) => transform(p, x0, y0, cell, xScale)))
-    .filter((pts) => pts.length > 0);
-  let pos: Point | undefined = currentPos;
-  let start: Point | undefined;
-
-  while (remaining.length) {
-    let bestIndex = 0;
-    let bestReverse = false;
-    let bestDistance = Number.POSITIVE_INFINITY;
-
-    if (pos) {
-      remaining.forEach((pts, index) => {
-        const forwardDistance = dist(pos as Point, pts[0]);
-        if (forwardDistance < bestDistance) {
-          bestDistance = forwardDistance;
-          bestIndex = index;
-          bestReverse = false;
-        }
-        const reverseDistance = dist(pos as Point, pts[pts.length - 1]);
-        if (reverseDistance < bestDistance) {
-          bestDistance = reverseDistance;
-          bestIndex = index;
-          bestReverse = true;
-        }
-      });
-    }
-
-    const [picked] = remaining.splice(bestIndex, 1);
-    const pts = bestReverse ? [...picked].reverse() : picked;
-    start ??= pts[0];
-    if (pos) appendSegment(segs, pos, pts[0], "connector");
+  for (const stroke of strokes) {
+    const pts = stroke.map((p) => transform(p, x0, y0, cell, xScale));
+    if (!pts.length) continue;
     for (let i = 0; i < pts.length - 1; i++) appendSegment(segs, pts[i], pts[i + 1], "stroke");
-    pos = pts[pts.length - 1];
   }
-
-  return { segs, start, end: pos };
+  return segs;
 }
 
 function labelHeight(cfg: GeneratorConfig, lines: string[]) {
@@ -269,18 +238,12 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   const blockH = lines.length * charH + Math.max(0, lines.length - 1) * lineGap;
   const topY = centerY + blockH / 2 - charH;
   const all: TypedSegment[] = [];
-  let pos: Point | undefined;
 
   lines.forEach((text, li) => {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
     [...text].forEach((_, ci) => {
-      const built = buildGlyph(text[ci], xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, pos);
-      const segs = built.segs;
-      const start = built.start;
-      const end = built.end;
-      all.push(...segs);
-      pos = end;
+      all.push(...buildGlyph(text[ci], xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale));
     });
   });
 
@@ -446,18 +409,22 @@ export function makeGcode(cfg: GeneratorConfig) {
   if (cfg.label) {
     emitTemperatureSet(lines, cfg, cfg.start_temp, "min");
     const typed = buildLabelSegments(cfg);
-    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=txt_shx_multistroke_width_split_boustrophedon_connected", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_RTL_line3_LTR", "; label_width_mode=stroke_vs_connector", `; label_stroke_width=${fmt(cfg.label_stroke_width)}`, `; label_connector_width=${fmt(cfg.label_connector_width)}`, `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.filter((s) => s[2] === "stroke").length}`, `; label_segments_connector=${typed.filter((s) => s[2] === "connector").length}`);
+    lines.push("", "; ---------- bottom inner label ----------", "; label_toolpath=disconnected_stroke_only", "; label_visual_layout=three_line_default", "; label_path_order=line1_LTR_line2_LTR_line3_LTR", "; label_width_mode=line_width_only", `; label_line_width=${fmt(cfg.line_width)}`, `; label_layout=${cfg.label_layout}`, `; label_lines=${labelLines.join(" | ")}`, `; label_segments_total=${typed.length}`, `; label_segments_stroke=${typed.length}`, "; label_segments_connector=0");
     if (typed.length) {
       const start = typed[0][0];
       lines.push(`G0 Z${fmt(cfg.layer_height)} F${fmt(cfg.z_travel_speed * 60, 1)}`);
       lines.push(`G0 X${fmt(start[0])} Y${fmt(start[1])} F${fmt(cfg.travel_speed * 60, 1)} ; label start, only travel move`);
       let eTotal = 0;
-      typed.forEach(([p0, p1, kind]) => {
-        const width = kind === "stroke" ? cfg.label_stroke_width : cfg.label_connector_width;
-        const e = (dist(p0, p1) * width * cfg.layer_height / fa) * cfg.extrusion_multiplier;
+      let cursor = start;
+      typed.forEach(([p0, p1]) => {
+        if (dist(cursor, p0) > 1e-9) {
+          lines.push(`G0 X${fmt(p0[0])} Y${fmt(p0[1])} F${fmt(cfg.travel_speed * 60, 1)} ; label stroke jump`);
+        }
+        const e = (dist(p0, p1) * cfg.line_width * cfg.layer_height / fa) * cfg.extrusion_multiplier;
         eTotal += e;
         labelEnd = p1;
-        lines.push(`G1 X${fmt(p1[0])} Y${fmt(p1[1])} E${fmt(e, 5)} F${fmt(cfg.label_speed * 60, 1)} ; label_${kind} width=${fmt(width)}`);
+        cursor = p1;
+        lines.push(`G1 X${fmt(p1[0])} Y${fmt(p1[1])} E${fmt(e, 5)} F${fmt(cfg.label_speed * 60, 1)} ; label_stroke width=${fmt(cfg.line_width)}`);
       });
       lines.push(`; label_estimated_E_mm=${fmt(eTotal, 3)}`);
     } else {
@@ -482,10 +449,8 @@ export function makeGcode(cfg: GeneratorConfig) {
 
     const start = pts[0];
     if (layer === 1 && labelEnd) {
-      const e = dist(labelEnd, start) * cfg.label_connector_width * cfg.layer_height / fa * cfg.extrusion_multiplier;
-      estimatedE += e;
-      lines.push("; label end -> seam connector: continue extrusion, no G0 travel");
-      lines.push(`G1 X${fmt(start[0])} Y${fmt(start[1])} E${fmt(e, 5)} F${fmt(cfg.label_speed * 60, 1)} ; label_connector_to_seam width=${fmt(cfg.label_connector_width)}`);
+      lines.push("; label end -> seam: travel only");
+      lines.push(`G0 X${fmt(start[0])} Y${fmt(start[1])} F${fmt(cfg.travel_speed * 60, 1)} ; label_end_to_seam_travel`);
     } else {
       lines.push(`G0 Z${fmt(z)} F${fmt(cfg.z_travel_speed * 60, 1)}`);
       lines.push(`G0 X${fmt(start[0])} Y${fmt(start[1])} F${fmt(cfg.travel_speed * 60, 1)} ; seam / 0% MVS point on bounding square edge`);

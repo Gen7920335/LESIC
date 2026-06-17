@@ -1094,48 +1094,22 @@ def emit_label(lines_out, cfg, label_lines, fa):
 
 def _build_glyph_segments_only(ch, x0, y0, cell, x_scale, current_pos=None):
     """
-    Build one glyph as typed segments.
-    If current_pos is provided, choose the nearest stroke endpoint as the next entry
-    and greedily continue by nearest remaining stroke endpoint.
+    Build one glyph as typed stroke segments only.
+    No extra connectors between strokes.
     Returns (segments, start_point, end_point).
     """
     strokes = TXT_SHX_STROKE_FONT.get(ch.upper(), TXT_SHX_STROKE_FONT[" "])
     segs = []
-    remaining = []
+    start_point = None
+    pos = None
     for stroke in strokes:
         if not stroke:
             continue
         stroke_pts = [_transform_stroke_point(p, x0, y0, cell, x_scale) for p in stroke]
-        if stroke_pts:
-            remaining.append(stroke_pts)
-    pos = current_pos
-    start_point = None
-
-    while remaining:
-        best_index = 0
-        best_reverse = False
-        best_distance = float("inf")
-
-        if pos is not None:
-            for i, pts in enumerate(remaining):
-                d_forward = dist(pos, pts[0])
-                if d_forward < best_distance:
-                    best_distance = d_forward
-                    best_index = i
-                    best_reverse = False
-                d_reverse = dist(pos, pts[-1])
-                if d_reverse < best_distance:
-                    best_distance = d_reverse
-                    best_index = i
-                    best_reverse = True
-
-        stroke_pts = remaining.pop(best_index)
-        if best_reverse:
-            stroke_pts = list(reversed(stroke_pts))
+        if not stroke_pts:
+            continue
         if start_point is None:
             start_point = stroke_pts[0]
-        if pos is not None:
-            _append_segment(segs, pos, stroke_pts[0], "connector")
         for a, b in zip(stroke_pts[:-1], stroke_pts[1:]):
             _append_segment(segs, a, b, "stroke")
         pos = stroke_pts[-1]
@@ -1146,8 +1120,8 @@ def _build_glyph_segments_only(ch, x0, y0, cell, x_scale, current_pos=None):
 def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, current_pos=None):
     """
     Glyph builder:
-    - choose the nearest reachable stroke endpoint as glyph entry
-    - connect by shortest local jump
+    - stroke segments only
+    - no inter-glyph or inter-stroke connectors
     """
     segs, start, end = _build_glyph_segments_only(ch, x0, y0, cell, x_scale, current_pos=current_pos)
     if start is None or end is None:
@@ -1160,7 +1134,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
     """
     Label path:
     - all visual lines traverse left -> right
-    - each glyph must finish before the next connector begins
+    - disconnected stroke-only glyph rendering
     """
     cell = char_h / 7.0
     x_scale = cfg.get("label_x_scale", 0.55)
@@ -1197,11 +1171,10 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
 def emit_label(lines_out, cfg, label_lines, fa):
     """
     v19 label:
-    - txt.shx-like multistroke glyphs
-    - line traversal is LTR/LTR/LTR
-    - original glyph strokes printed with label_stroke_width
-    - connectors printed with label_connector_width
-    - returns the final XY point so the body can continue from label end to seam by extrusion
+    - disconnected stroke-only glyphs
+    - no glyph connectors
+    - label lines use cfg['line_width']
+    - returns the final XY point so the body can continue from label end to seam by travel
     """
     if not cfg["label"]:
         return None
@@ -1213,26 +1186,19 @@ def emit_label(lines_out, cfg, label_lines, fa):
 
     typed_segments, info = _build_txt_shx_width_typed_segments(cfg, label_lines, char_h)
 
-    stroke_width = cfg.get("label_stroke_width", 0.6)
-    connector_width = cfg.get("label_connector_width", 0.2)
+    stroke_width = cfg["line_width"]
     layer_h = cfg["layer_height"]
-
     stroke_count = sum(1 for _, _, k in typed_segments if k == "stroke")
-    connector_count = sum(1 for _, _, k in typed_segments if k == "connector")
 
     lines_out += [
         "",
         "; ---------- bottom inner label ----------",
-        "; label_toolpath=txt_shx_multistroke_width_split_boustrophedon_connected",
+        "; label_toolpath=disconnected_stroke_only",
         "; label_visual_layout=three_line_default",
         "; label_path_order=line1_LTR_line2_LTR_line3_LTR",
-        "; label_path_rule=stroke_end_to_next_stroke_start_and_glyph_end_to_next_glyph_start",
-        "; label_width_mode=stroke_vs_connector",
-        f"; label_stroke_width={fmt(stroke_width)}",
-        f"; label_connector_width={fmt(connector_width)}",
-        "; label_no_internal_travel=1",
-        "; label_no_retract=1",
-        "; label_no_z_hop=1",
+        "; label_path_rule=stroke_only_no_connectors",
+        "; label_width_mode=line_width_only",
+        f"; label_line_width={fmt(stroke_width)}",
         f"; label_layout={cfg['label_layout']}",
         f"; label_target_height={fmt(target_h)}",
         f"; label_actual_height={fmt(char_h)}",
@@ -1240,7 +1206,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
         f"; label_lines={' | '.join(label_lines)}",
         f"; label_segments_total={len(typed_segments)}",
         f"; label_segments_stroke={stroke_count}",
-        f"; label_segments_connector={connector_count}",
+        "; label_segments_connector=0",
     ]
 
     if not typed_segments:
@@ -1254,17 +1220,20 @@ def emit_label(lines_out, cfg, label_lines, fa):
 
     e_total = 0.0
     end_point = start
+    cursor = start
     for p0, p1, kind in typed_segments:
-        width = stroke_width if kind == "stroke" else connector_width
-        cross_section = width * layer_h
+        if dist(cursor, p0) > 1e-9:
+            lines_out.append(f"G0 X{fmt(p0[0])} Y{fmt(p0[1])} F{fmt(cfg['travel_speed']*60,1)} ; label stroke jump")
+        cross_section = stroke_width * layer_h
         length = ((p1[0] - p0[0]) ** 2 + (p1[1] - p0[1]) ** 2) ** 0.5
         if length <= 0:
             continue
         e = length * cross_section / fa * cfg["extrusion_multiplier"]
         e_total += e
         end_point = p1
+        cursor = p1
         lines_out.append(
-            f"G1 X{fmt(p1[0])} Y{fmt(p1[1])} E{fmt(e,5)} F{fmt(cfg['label_speed']*60,1)} ; label_{kind} width={fmt(width)}"
+            f"G1 X{fmt(p1[0])} Y{fmt(p1[1])} E{fmt(e,5)} F{fmt(cfg['label_speed']*60,1)} ; label_stroke width={fmt(stroke_width)}"
         )
 
     lines_out.append(f"; label_estimated_E_mm={fmt(e_total,3)}")
@@ -1453,15 +1422,11 @@ def make_gcode(cfg):
 
         start = pts[0]
         if layer == 1 and label_end_point is not None:
-            connector_width = cfg.get("label_connector_width", cfg["line_width"])
-            connector_cross_section = connector_width * cfg["layer_height"]
-            connector_len = dist(label_end_point, start)
-            connector_e = connector_len * connector_cross_section / fa * cfg["extrusion_multiplier"]
-            e_total_est += connector_e
-            lines.append("; label end -> seam connector: continue extrusion, no G0 travel")
+            lines.append(f"G0 Z{fmt(z)} F{fmt(cfg['z_travel_speed'] * 60, 1)}")
+            lines.append("; label end -> seam: travel only")
             lines.append(
-                f"G1 X{fmt(start[0])} Y{fmt(start[1])} E{fmt(connector_e,5)} F{fmt(cfg['label_speed']*60,1)} "
-                f"; label_connector_to_seam width={fmt(connector_width)}"
+                f"G0 X{fmt(start[0])} Y{fmt(start[1])} F{fmt(cfg['travel_speed'] * 60, 1)} "
+                "; label_end_to_seam_travel"
             )
         else:
             lines.append(f"G0 Z{fmt(z)} F{fmt(cfg['z_travel_speed'] * 60, 1)}")
