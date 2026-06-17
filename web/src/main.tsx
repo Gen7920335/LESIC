@@ -466,7 +466,7 @@ function Preview({ cfg, gcode, language }: { cfg: GeneratorConfig; gcode: string
       x2={b[0]}
       y2={b[1]}
       className={kind}
-      style={{ strokeWidth: kind === "connector" ? `${2.2 + (count - 1) * 1.1}px` : `${1.1 + (count - 1) * 0.95}px` }}
+      style={{ strokeWidth: kind === "connector" ? `${1.1 + (count - 1) * 0.65}px` : `${0.45 + (count - 1) * 0.38}px` }}
     />
   ));
   const tooLarge = data.square.x < 0 || data.square.y < 0 || data.square.x + data.square.d > data.bed.x || data.square.y + data.square.d > data.bed.y;
