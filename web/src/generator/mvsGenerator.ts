@@ -212,6 +212,11 @@ function buildGlyphCenterlines(ch: string, x0: number, y0: number, cell: number,
   return segs;
 }
 
+function glyphSourcePoints(ch: string, x0: number, y0: number, cell: number, xScale: number) {
+  const strokes = FONT[ch.toUpperCase()] ?? FONT[" "];
+  return strokes.flatMap((stroke) => stroke.map((p) => transform(p, x0, y0, cell, xScale)));
+}
+
 function edgeKey(a: Point, b: Point) {
   return `${fmt(a[0], 5)},${fmt(a[1], 5)}>${fmt(b[0], 5)},${fmt(b[1], 5)}`;
 }
@@ -346,6 +351,101 @@ function buildGlyphOutline(ch: string, x0: number, y0: number, cell: number, xSc
   return all;
 }
 
+type GlyphBuild = {
+  segments: TypedSegment[];
+  outerLoop: Point[];
+  sourcePoints: Point[];
+  bbox: { minX: number; maxX: number; minY: number; maxY: number };
+};
+
+function buildGlyphGeometry(ch: string, x0: number, y0: number, cell: number, xScale: number, lineWidth: number): GlyphBuild {
+  const centerlines = buildGlyphCenterlines(ch, x0, y0, cell, xScale);
+  const sourcePoints = glyphSourcePoints(ch, x0, y0, cell, xScale);
+  if (!centerlines.length || !sourcePoints.length) {
+    return { segments: [], outerLoop: [], sourcePoints: [], bbox: { minX: x0, maxX: x0, minY: y0, maxY: y0 } };
+  }
+
+  const points = centerlines.flatMap(([a, b]) => [a, b]);
+  const minX = Math.min(...points.map((p) => p[0]));
+  const maxX = Math.max(...points.map((p) => p[0]));
+  const minY = Math.min(...points.map((p) => p[1]));
+  const maxY = Math.max(...points.map((p) => p[1]));
+  const radii = [0.5, 1.0];
+  const sample = Math.max(0.12, lineWidth / 3);
+  const all: TypedSegment[] = [];
+  let outerLoop: Point[] = [];
+
+  radii.forEach((radius, idx) => {
+    const pad = radius + sample * 2;
+    const originX = minX - pad;
+    const originY = minY - pad;
+    const cols = Math.max(1, Math.ceil((maxX - minX + pad * 2) / sample));
+    const rows = Math.max(1, Math.ceil((maxY - minY + pad * 2) / sample));
+    const filled: boolean[][] = Array.from({ length: rows }, () => Array<boolean>(cols).fill(false));
+
+    for (let gy = 0; gy < rows; gy++) for (let gx = 0; gx < cols; gx++) {
+      const p: Point = [originX + (gx + 0.5) * sample, originY + (gy + 0.5) * sample];
+      filled[gy][gx] = centerlines.some(([a, b]) => pointToSegmentDistance(p, a, b) <= radius);
+    }
+
+    const contour: TypedSegment[] = [];
+    const xAt = (gx: number) => originX + gx * sample;
+    const yAt = (gy: number) => originY + gy * sample;
+    for (let gy = 0; gy < rows; gy++) for (let gx = 0; gx < cols; gx++) {
+      if (!filled[gy][gx]) continue;
+      const leftEmpty = gx === 0 || !filled[gy][gx - 1];
+      const rightEmpty = gx === cols - 1 || !filled[gy][gx + 1];
+      const bottomEmpty = gy === 0 || !filled[gy - 1][gx];
+      const topEmpty = gy === rows - 1 || !filled[gy + 1][gx];
+      if (bottomEmpty) contour.push([[xAt(gx), yAt(gy)], [xAt(gx + 1), yAt(gy)], "stroke"]);
+      if (rightEmpty) contour.push([[xAt(gx + 1), yAt(gy)], [xAt(gx + 1), yAt(gy + 1)], "stroke"]);
+      if (topEmpty) contour.push([[xAt(gx + 1), yAt(gy + 1)], [xAt(gx), yAt(gy + 1)], "stroke"]);
+      if (leftEmpty) contour.push([[xAt(gx), yAt(gy + 1)], [xAt(gx), yAt(gy)], "stroke"]);
+    }
+    const loop = extractLargestLoop(contour);
+    if (idx === radii.length - 1) outerLoop = loop;
+    for (let i = 0; i < loop.length - 1; i++) appendSegment(all, loop[i], loop[i + 1], "stroke");
+  });
+
+  return { segments: all, outerLoop, sourcePoints, bbox: { minX, maxX, minY, maxY } };
+}
+
+function nearestLoopPoint(loop: Point[], target: Point) {
+  return loop.reduce((best, p) => dist(p, target) < dist(best, target) ? p : best, loop[0]);
+}
+
+function hasCornerNear(points: Point[], target: Point, tol: number) {
+  return points.some((p) => dist(p, target) <= tol);
+}
+
+function connectAdjacentGlyphs(left: GlyphBuild, right: GlyphBuild, cell: number): TypedSegment[] {
+  if (!left.outerLoop.length || !right.outerLoop.length) return [];
+  const tol = cell * 0.7;
+  const leftTR: Point = [left.bbox.maxX, left.bbox.maxY];
+  const leftBR: Point = [left.bbox.maxX, left.bbox.minY];
+  const rightTL: Point = [right.bbox.minX, right.bbox.maxY];
+  const rightBL: Point = [right.bbox.minX, right.bbox.minY];
+
+  const leftTop = nearestLoopPoint(left.outerLoop, leftTR);
+  const leftBottom = nearestLoopPoint(left.outerLoop, leftBR);
+  const rightTop = nearestLoopPoint(right.outerLoop, rightTL);
+  const rightBottom = nearestLoopPoint(right.outerLoop, rightBL);
+
+  const segs: TypedSegment[] = [];
+  appendSegment(segs, leftTop, rightTop, "stroke");
+  appendSegment(segs, leftBottom, rightBottom, "stroke");
+
+  const leftHasTop = hasCornerNear(left.sourcePoints, leftTR, tol);
+  const leftHasBottom = hasCornerNear(left.sourcePoints, leftBR, tol);
+  const rightHasTop = hasCornerNear(right.sourcePoints, rightTL, tol);
+  const rightHasBottom = hasCornerNear(right.sourcePoints, rightBL, tol);
+  if (leftHasTop && leftHasBottom && rightHasTop && rightHasBottom) {
+    appendSegment(segs, leftTop, rightBottom, "stroke");
+    appendSegment(segs, leftBottom, rightTop, "stroke");
+  }
+  return segs;
+}
+
 function buildHullLoops(segs: TypedSegment[]) {
   const points = segs.flatMap(([a, b]) => [a, b]);
   const hull = convexHull(points);
@@ -397,9 +497,9 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
   lines.forEach((text, li) => {
     const y0 = topY - li * (charH + lineGap);
     const xLeft = centerX - widths[li] / 2;
-    [...text].forEach((_, ci) => {
-      all.push(...buildGlyphOutline(text[ci], xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
-    });
+    const glyphs = [...text].map((ch, ci) => buildGlyphGeometry(ch, xLeft + ci * 6 * cell * cfg.label_x_scale, y0, cell, cfg.label_x_scale, cfg.line_width));
+    glyphs.forEach((g) => all.push(...g.segments));
+    for (let i = 0; i < glyphs.length - 1; i++) all.push(...connectAdjacentGlyphs(glyphs[i], glyphs[i + 1], cell));
   });
 
   return [...all, ...buildHullLoops(all)];

@@ -1109,6 +1109,11 @@ def _build_glyph_segments_only(ch, x0, y0, cell, x_scale, current_pos=None):
     return segs
 
 
+def _glyph_source_points(ch, x0, y0, cell, x_scale):
+    strokes = TXT_SHX_STROKE_FONT.get(ch.upper(), TXT_SHX_STROKE_FONT[" "])
+    return [_transform_stroke_point(p, x0, y0, cell, x_scale) for stroke in strokes for p in stroke]
+
+
 def _point_segment_distance(p, a, b):
     dx = b[0] - a[0]
     dy = b[1] - a[1]
@@ -1255,6 +1260,79 @@ def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
     return all_segments
 
 
+def _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width):
+    centerlines = _build_glyph_segments_only(ch, x0, y0, cell, x_scale)
+    source_points = _glyph_source_points(ch, x0, y0, cell, x_scale)
+    if not centerlines or not source_points:
+        return {
+            "segments": [],
+            "outer_loop": [],
+            "source_points": source_points,
+            "bbox": {"min_x": x0, "max_x": x0, "min_y": y0, "max_y": y0},
+        }
+
+    pts = [p for seg in centerlines for p in seg[:2]]
+    min_x = min(p[0] for p in pts)
+    max_x = max(p[0] for p in pts)
+    min_y = min(p[1] for p in pts)
+    max_y = max(p[1] for p in pts)
+    radii = [0.5, 1.0]
+    sample = max(0.12, line_width / 3.0)
+    all_segments = []
+    outer_loop = []
+
+    for idx, radius in enumerate(radii):
+        pad = radius + sample * 2.0
+        origin_x = min_x - pad
+        origin_y = min_y - pad
+        cols = max(1, int(math.ceil((max_x - min_x + pad * 2.0) / sample)))
+        rows = max(1, int(math.ceil((max_y - min_y + pad * 2.0) / sample)))
+        filled = [[False for _ in range(cols)] for _ in range(rows)]
+
+        for gy in range(rows):
+            for gx in range(cols):
+                p = (origin_x + (gx + 0.5) * sample, origin_y + (gy + 0.5) * sample)
+                filled[gy][gx] = any(_point_segment_distance(p, a, b) <= radius for a, b, _ in centerlines)
+
+        contour = []
+
+        def x_at(gx):
+            return origin_x + gx * sample
+
+        def y_at(gy):
+            return origin_y + gy * sample
+
+        for gy in range(rows):
+            for gx in range(cols):
+                if not filled[gy][gx]:
+                    continue
+                left_empty = gx == 0 or not filled[gy][gx - 1]
+                right_empty = gx == cols - 1 or not filled[gy][gx + 1]
+                bottom_empty = gy == 0 or not filled[gy - 1][gx]
+                top_empty = gy == rows - 1 or not filled[gy + 1][gx]
+                if bottom_empty:
+                    contour.append(((x_at(gx), y_at(gy)), (x_at(gx + 1), y_at(gy)), "stroke"))
+                if right_empty:
+                    contour.append(((x_at(gx + 1), y_at(gy)), (x_at(gx + 1), y_at(gy + 1)), "stroke"))
+                if top_empty:
+                    contour.append(((x_at(gx + 1), y_at(gy + 1)), (x_at(gx), y_at(gy + 1)), "stroke"))
+                if left_empty:
+                    contour.append(((x_at(gx), y_at(gy + 1)), (x_at(gx), y_at(gy)), "stroke"))
+
+        loop = _extract_largest_loop(contour)
+        if idx == len(radii) - 1:
+            outer_loop = loop
+        for a, b in zip(loop[:-1], loop[1:]):
+            _append_segment(all_segments, a, b, "stroke")
+
+    return {
+        "segments": all_segments,
+        "outer_loop": outer_loop,
+        "source_points": source_points,
+        "bbox": {"min_x": min_x, "max_x": max_x, "min_y": min_y, "max_y": max_y},
+    }
+
+
 def _build_hull_loops(segs):
     points = [p for seg in segs for p in seg[:2]]
     hull = _convex_hull(points)
@@ -1265,6 +1343,42 @@ def _build_hull_loops(segs):
     for a, b in zip(closed[:-1], closed[1:]):
         _append_segment(loop, a, b, "stroke")
     return loop + loop
+
+
+def _nearest_loop_point(loop, target):
+    return min(loop, key=lambda p: dist(p, target))
+
+
+def _has_corner_near(points, target, tol):
+    return any(dist(p, target) <= tol for p in points)
+
+
+def _connect_adjacent_glyphs(left_geom, right_geom, cell):
+    if not left_geom["outer_loop"] or not right_geom["outer_loop"]:
+        return []
+    tol = cell * 0.7
+    left_tr = (left_geom["bbox"]["max_x"], left_geom["bbox"]["max_y"])
+    left_br = (left_geom["bbox"]["max_x"], left_geom["bbox"]["min_y"])
+    right_tl = (right_geom["bbox"]["min_x"], right_geom["bbox"]["max_y"])
+    right_bl = (right_geom["bbox"]["min_x"], right_geom["bbox"]["min_y"])
+
+    left_top = _nearest_loop_point(left_geom["outer_loop"], left_tr)
+    left_bottom = _nearest_loop_point(left_geom["outer_loop"], left_br)
+    right_top = _nearest_loop_point(right_geom["outer_loop"], right_tl)
+    right_bottom = _nearest_loop_point(right_geom["outer_loop"], right_bl)
+
+    segs = []
+    _append_segment(segs, left_top, right_top, "stroke")
+    _append_segment(segs, left_bottom, right_bottom, "stroke")
+
+    left_has_top = _has_corner_near(left_geom["source_points"], left_tr, tol)
+    left_has_bottom = _has_corner_near(left_geom["source_points"], left_br, tol)
+    right_has_top = _has_corner_near(right_geom["source_points"], right_tl, tol)
+    right_has_bottom = _has_corner_near(right_geom["source_points"], right_bl, tol)
+    if left_has_top and left_has_bottom and right_has_top and right_has_bottom:
+        _append_segment(segs, left_top, right_bottom, "stroke")
+        _append_segment(segs, left_bottom, right_top, "stroke")
+    return segs
 
 
 def _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, line_width):
@@ -1301,10 +1415,14 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
         line_w = widths[li]
         x_left = center_x - line_w / 2.0
 
+        glyphs = []
         for ci, ch in enumerate(text):
             x0 = x_left + ci * 6 * cell * x_scale
-            segs, _ = _txt_shx_glyph_typed_segments(ch, x0, y0, cell, x_scale, line_width)
-            all_segments.extend(segs)
+            geom = _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width)
+            glyphs.append(geom)
+            all_segments.extend(geom["segments"])
+        for left_geom, right_geom in zip(glyphs[:-1], glyphs[1:]):
+            all_segments.extend(_connect_adjacent_glyphs(left_geom, right_geom, cell))
 
     all_segments.extend(_build_hull_loops(all_segments))
 
