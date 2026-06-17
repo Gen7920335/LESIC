@@ -1531,7 +1531,6 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
         for left_geom, right_geom in zip(glyphs[:-1], glyphs[1:]):
             all_segments.extend(_connect_adjacent_glyphs(left_geom, right_geom, cell))
 
-    all_segments.extend(_build_interline_rails(lines_glyphs, cell))
     all_segments.extend(_build_hull_loops(all_segments))
 
     return all_segments, {

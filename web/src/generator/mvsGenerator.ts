@@ -591,7 +591,7 @@ export function buildLabelSegments(cfg: GeneratorConfig): TypedSegment[] {
     for (let i = 0; i < glyphs.length - 1; i++) all.push(...connectAdjacentGlyphs(glyphs[i], glyphs[i + 1], cell));
   });
 
-  return [...all, ...buildInterlineRails(linesGlyphs, cell), ...buildHullLoops(all)];
+  return [...all, ...buildHullLoops(all)];
 }
 
 function emitFirmwareMotionBlock(lines: string[], cfg: GeneratorConfig) {
