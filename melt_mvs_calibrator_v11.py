@@ -14,6 +14,7 @@ LABEL_TEXT_WIDTH = 1.0
 LABEL_OUTLINE_WIDTH = 0.25
 LABEL_INNER_OUTLINE_RADIUS = LABEL_TEXT_WIDTH / 2.0 + LABEL_OUTLINE_WIDTH / 2.0
 LABEL_OUTER_RADIUS = LABEL_INNER_OUTLINE_RADIUS + LABEL_OUTLINE_WIDTH
+NO_INNER_LOOP_BRIDGE_CHARS = {":", ".", ",", "•"}
 
 
 FONT = {
@@ -54,6 +55,7 @@ FONT = {
     "Y":["10001","10001","01010","00100","00100","00100","00100"],
     "Z":["11111","00001","00010","00100","01000","10000","11111"],
     "/":["00001","00010","00010","00100","01000","01000","10000"],
+    "×":["10001","01010","00100","00100","00100","01010","10001"],
     "_":["00000","00000","00000","00000","00000","00000","11111"],
     "-":["00000","00000","00000","11111","00000","00000","00000"],
     ":":["00000","00100","00100","00000","00100","00100","00000"],
@@ -308,6 +310,7 @@ STROKE_FONT = {
     "Y":[(0,7),(2.5,3.5),(5,7),(2.5,3.5),(2.5,0)],
     "Z":[(0,7),(5,7),(0,0),(5,0)],
     "/":[(0,0),(5,7)],
+    "×":[(0,7),(5,0),(0,0),(5,7)],
     "_":[(0,0),(5,0)],
     "-":[(0,3.5),(5,3.5)],
     ":":[(2.5,5.5),(2.5,5.0),(2.5,2.0),(2.5,1.5)],
@@ -823,6 +826,7 @@ TXT_SHX_STROKE_FONT = {
     "Z":[[(0,7),(5,7),(0,0),(5,0)]],
 
     "/":[[(0,0),(5,7)]],
+    "×":[[(0,7),(5,0)],[(0,0),(5,7)]],
     "_":[[(0,0),(5,0)]],
     "-":[[(0,3.5),(5,3.5)]],
     ":":[[(2.3,5.7),(2.7,5.7),(2.7,5.3),(2.3,5.3),(2.3,5.7)],[(2.3,1.7),(2.7,1.7),(2.7,1.3),(2.3,1.3),(2.3,1.7)]],
@@ -1197,14 +1201,57 @@ def _convex_hull(points):
     return lower[:-1] + upper[:-1]
 
 
-def _extract_largest_loop(segs):
+def _polygon_area(loop):
+    area = 0.0
+    for p0, p1 in zip(loop[:-1], loop[1:]):
+        area += p0[0] * p1[1] - p1[0] * p0[1]
+    return area
+
+
+def _loop_bounds(loop):
+    return {
+        "min_x": min(p[0] for p in loop),
+        "max_x": max(p[0] for p in loop),
+        "min_y": min(p[1] for p in loop),
+        "max_y": max(p[1] for p in loop),
+    }
+
+
+def _loop_center(loop):
+    b = _loop_bounds(loop)
+    return ((b["min_x"] + b["max_x"]) / 2.0, (b["min_y"] + b["max_y"]) / 2.0)
+
+
+def _point_in_loop(p, loop):
+    inside = False
+    j = len(loop) - 1
+    for i in range(len(loop)):
+        pi = loop[i]
+        pj = loop[j]
+        intersects = (pi[1] > p[1]) != (pj[1] > p[1]) and p[0] < ((pj[0] - pi[0]) * (p[1] - pi[1])) / ((pj[1] - pi[1]) or 1e-12) + pi[0]
+        if intersects:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _inner_loops_for_outer(outer_loop, loops):
+    if not outer_loop:
+        return []
+    return [loop for loop in loops[1:] if _point_in_loop(_loop_center(loop), outer_loop)]
+
+
+def _should_bridge_inner_loops(ch):
+    return ch not in NO_INNER_LOOP_BRIDGE_CHARS
+
+
+def _extract_all_loops(segs):
     outgoing = {}
     for a, b, _ in segs:
         outgoing.setdefault(_point_key(a), []).append((a, b))
 
     visited = set()
-    best_loop = []
-    best_area = 0.0
+    loops = []
 
     for a, b, _ in segs:
         edge_id = (_point_key(a), _point_key(b))
@@ -1232,14 +1279,112 @@ def _extract_largest_loop(segs):
             loop.append(cur)
 
         if len(loop) >= 4:
-            area = 0.0
-            for p0, p1 in zip(loop[:-1], loop[1:]):
-                area += p0[0] * p1[1] - p1[0] * p0[1]
-            if abs(area) > abs(best_area):
-                best_area = area
-                best_loop = loop
+            loops.append(loop)
 
-    return best_loop
+    return sorted(loops, key=lambda loop: abs(_polygon_area(loop)), reverse=True)
+
+
+def _pick_horizontal_loop_point(loop, target_y, side):
+    if side == "left":
+        return min(loop, key=lambda p: (abs(p[1] - target_y), p[0]))
+    return min(loop, key=lambda p: (abs(p[1] - target_y), -p[0]))
+
+
+def _horizontal_loop_bridge_points(loop, target_y):
+    xs = []
+    for a, b in zip(loop[:-1], loop[1:]):
+        y0 = a[1]
+        y1 = b[1]
+        if abs(y0 - y1) <= 1e-9:
+            if abs(y0 - target_y) <= 1e-9:
+                xs.extend([a[0], b[0]])
+            continue
+        if target_y < min(y0, y1) - 1e-9 or target_y > max(y0, y1) + 1e-9:
+            continue
+        t = (target_y - y0) / (y1 - y0)
+        if t < -1e-9 or t > 1.0 + 1e-9:
+            continue
+        xs.append(a[0] + (b[0] - a[0]) * t)
+    if len(xs) < 2:
+        return None
+    return (min(xs), target_y), (max(xs), target_y)
+
+
+def _pick_vertical_loop_point(loop, target_x, side):
+    if side == "top":
+        return min(loop, key=lambda p: (abs(p[0] - target_x), -p[1]))
+    return min(loop, key=lambda p: (abs(p[0] - target_x), p[1]))
+
+
+def _pick_punctuation_rail_anchor(g, side):
+    loops = g.get("outline_loops") or ([g["outer_loop"]] if g["outer_loop"] else [])
+    if not loops:
+        return None
+    if side == "top":
+        selected = max(loops, key=lambda loop: _loop_bounds(loop)["max_y"])
+    else:
+        selected = min(loops, key=lambda loop: _loop_bounds(loop)["min_y"])
+    return _pick_vertical_loop_point(selected, _loop_center(selected)[0], side)
+
+
+def _offset_point_toward_rail(start, rail_y, clearance):
+    dy = rail_y - start[1]
+    distance = abs(dy)
+    if distance <= 1e-9:
+        return start
+    if distance <= clearance:
+        return (start[0], rail_y)
+    return (start[0], start[1] + (clearance if dy > 0 else -clearance))
+
+
+def _build_inner_loop_bridges(outer_loop, inner_loops):
+    bridges = []
+    if not outer_loop or not inner_loops:
+        return bridges
+    for loop in inner_loops:
+        ys = [p[1] for p in loop]
+        target_y = (min(ys) + max(ys)) / 2.0
+        inner_left = _pick_horizontal_loop_point(loop, target_y, "left")
+        inner_right = _pick_horizontal_loop_point(loop, target_y, "right")
+        left_candidates = [p for p in outer_loop if p[0] <= inner_left[0] + 1e-9]
+        right_candidates = [p for p in outer_loop if p[0] >= inner_right[0] - 1e-9]
+        outer_left = _pick_horizontal_loop_point(left_candidates if left_candidates else outer_loop, target_y, "right")
+        outer_right = _pick_horizontal_loop_point(right_candidates if right_candidates else outer_loop, target_y, "left")
+        _append_segment(bridges, outer_left, inner_left, "stroke")
+        _append_segment(bridges, inner_right, outer_right, "stroke")
+    return bridges
+
+
+def _build_forced_loop_bridge(ch, loops):
+    if ch != "°" or not loops:
+        return []
+    loop = loops[0]
+    target_y = _loop_center(loop)[1]
+    bridge = _horizontal_loop_bridge_points(loop, target_y)
+    if bridge:
+        left, right = bridge
+    else:
+        left = _pick_horizontal_loop_point(loop, target_y, "left")
+        right = _pick_horizontal_loop_point(loop, target_y, "right")
+    segs = []
+    _append_segment(segs, left, right, "stroke")
+    return segs
+
+
+def _build_detached_glyph_spine(ch, loops):
+    if ch not in {",", "•"}:
+        return []
+    points = [p for loop in loops for p in loop]
+    if not points:
+        return []
+    min_x = min(p[0] for p in points)
+    max_x = max(p[0] for p in points)
+    min_y = min(p[1] for p in points)
+    max_y = max(p[1] for p in points)
+    x_center = (min_x + max_x) / 2.0
+    segs = []
+    _append_segment(segs, (x_center, min_y), (x_center, max_y), "stroke")
+    return segs
 
 
 def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
@@ -1295,9 +1440,15 @@ def _build_glyph_outer_contours(ch, x0, y0, cell, x_scale, line_width):
                 if left_empty:
                     contour.append(((x_at(gx), y_at(gy + 1)), (x_at(gx), y_at(gy)), "stroke"))
 
-        loop = _extract_largest_loop(contour)
-        for a, b in zip(loop[:-1], loop[1:]):
-            _append_segment(all_segments, a, b, "stroke")
+        loops = _extract_all_loops(contour)
+        outer_loop = loops[0] if loops else []
+        inner_loops = _inner_loops_for_outer(outer_loop, loops) if _should_bridge_inner_loops(ch) else []
+        for loop in loops:
+            for a, b in zip(loop[:-1], loop[1:]):
+                _append_segment(all_segments, a, b, "stroke")
+        all_segments.extend(_build_inner_loop_bridges(outer_loop, inner_loops))
+        all_segments.extend(_build_forced_loop_bridge(ch, loops))
+        all_segments.extend(_build_detached_glyph_spine(ch, loops))
 
     return all_segments
 
@@ -1307,8 +1458,11 @@ def _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width):
     source_points = _glyph_source_points(ch, x0, y0, cell, x_scale)
     if not centerlines or not source_points:
         return {
+            "char": ch,
             "segments": [],
             "outer_loop": [],
+            "inner_loops": [],
+            "outline_loops": [],
             "source_points": source_points,
             "bbox": {"min_x": x0, "max_x": x0, "min_y": y0, "max_y": y0},
         }
@@ -1322,6 +1476,8 @@ def _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width):
     sample = max(0.12, line_width / 3.0)
     all_segments = []
     outer_loop = []
+    inner_loops = []
+    outline_loops = []
 
     for idx, radius in enumerate(radii):
         pad = radius + sample * 2.0
@@ -1361,15 +1517,25 @@ def _build_glyph_geometry(ch, x0, y0, cell, x_scale, line_width):
                 if left_empty:
                     contour.append(((x_at(gx), y_at(gy + 1)), (x_at(gx), y_at(gy)), "stroke"))
 
-        loop = _extract_largest_loop(contour)
+        loops = _extract_all_loops(contour)
         if idx == len(radii) - 1:
-            outer_loop = loop
-        for a, b in zip(loop[:-1], loop[1:]):
-            _append_segment(all_segments, a, b, "stroke")
+            outer_loop = loops[0] if loops else []
+            inner_loops = _inner_loops_for_outer(outer_loop, loops) if _should_bridge_inner_loops(ch) else []
+            outline_loops = loops
+        for loop in loops:
+            for a, b in zip(loop[:-1], loop[1:]):
+                _append_segment(all_segments, a, b, "stroke")
+        if idx == len(radii) - 1:
+            all_segments.extend(_build_inner_loop_bridges(outer_loop, inner_loops))
+            all_segments.extend(_build_forced_loop_bridge(ch, loops))
+            all_segments.extend(_build_detached_glyph_spine(ch, loops))
 
     return {
+        "char": ch,
         "segments": all_segments,
         "outer_loop": outer_loop,
+        "inner_loops": inner_loops,
+        "outline_loops": outline_loops,
         "source_points": source_points,
         "bbox": {"min_x": min_x, "max_x": max_x, "min_y": min_y, "max_y": max_y},
     }
@@ -1492,8 +1658,9 @@ def _connect_adjacent_glyphs(left_geom, right_geom, cell):
     return segs
 
 
-def _build_interline_rails(lines_glyphs, cell):
+def _build_interline_rails(lines_glyphs, cell, connector_clearance):
     segs = []
+    punctuation_chars = {":", ".", "°"}
     for upper_line, lower_line in zip(lines_glyphs[:-1], lines_glyphs[1:]):
         upper = [g for g in upper_line if g["outer_loop"]]
         lower = [g for g in lower_line if g["outer_loop"]]
@@ -1508,8 +1675,40 @@ def _build_interline_rails(lines_glyphs, cell):
         lower_max_x = max(p[0] for p in lower_pts)
         lower_top_y = max(p[1] for p in lower_pts)
         eps = max(0.02, cell * 0.03)
-        _append_segment(segs, (upper_min_x, upper_bottom_y - eps), (upper_max_x, upper_bottom_y - eps), "connector")
-        _append_segment(segs, (lower_min_x, lower_top_y + eps), (lower_max_x, lower_top_y + eps), "connector")
+        upper_rail_y = upper_bottom_y - eps
+        lower_rail_y = lower_top_y + eps
+        _append_segment(segs, (upper_min_x, upper_rail_y), (upper_max_x, upper_rail_y), "connector")
+        _append_segment(segs, (lower_min_x, lower_rail_y), (lower_max_x, lower_rail_y), "connector")
+        for g in lower:
+            if g.get("char") not in punctuation_chars:
+                continue
+            start = _pick_punctuation_rail_anchor(g, "top")
+            if not start:
+                continue
+            _append_segment(segs, _offset_point_toward_rail(start, lower_rail_y, connector_clearance), (start[0], lower_rail_y), "connector")
+        for g in upper:
+            if g.get("char") not in punctuation_chars:
+                continue
+            start = _pick_punctuation_rail_anchor(g, "bottom")
+            if not start:
+                continue
+            _append_segment(segs, _offset_point_toward_rail(start, upper_rail_y, connector_clearance), (start[0], upper_rail_y), "connector")
+    last_line = [g for g in lines_glyphs[-1] if g["outer_loop"]] if lines_glyphs else []
+    if last_line:
+        last_pts = [p for g in last_line for p in g["outer_loop"]]
+        last_min_x = min(p[0] for p in last_pts)
+        last_max_x = max(p[0] for p in last_pts)
+        last_bottom_y = min(p[1] for p in last_pts)
+        eps = max(0.02, cell * 0.03)
+        bottom_rail_y = last_bottom_y - eps
+        _append_segment(segs, (last_min_x, bottom_rail_y), (last_max_x, bottom_rail_y), "connector")
+        for g in last_line:
+            if g.get("char") not in punctuation_chars:
+                continue
+            start = _pick_punctuation_rail_anchor(g, "bottom")
+            if not start:
+                continue
+            _append_segment(segs, _offset_point_toward_rail(start, bottom_rail_y, connector_clearance), (start[0], bottom_rail_y), "connector")
     return segs
 
 
@@ -1556,7 +1755,7 @@ def _build_txt_shx_width_typed_segments(cfg, label_lines, char_h):
             all_segments.extend(geom["segments"])
         lines_glyphs.append(glyphs)
 
-    all_segments.extend(_build_interline_rails(lines_glyphs, cell))
+    all_segments.extend(_build_interline_rails(lines_glyphs, cell, max(0.0, cfg.get("label_connector_width", 0.2) / 2.0)))
     all_segments.extend(_build_hull_loops(all_segments))
 
     return all_segments, {
@@ -1663,7 +1862,8 @@ def emit_label(lines_out, cfg, label_lines, fa):
 
     typed_segments, info = _build_txt_shx_width_typed_segments(cfg, label_lines, char_h)
 
-    stroke_width = 0.25
+    stroke_width = LABEL_OUTLINE_WIDTH
+    connector_width = max(0.0, cfg.get("label_connector_width", 0.2))
     layer_h = cfg["layer_height"]
     stroke_count = sum(1 for _, _, k in typed_segments if k == "stroke")
     connector_count = sum(1 for _, _, k in typed_segments if k == "connector")
@@ -1674,9 +1874,10 @@ def emit_label(lines_out, cfg, label_lines, fa):
         "; label_toolpath=glyph_outer_double_contour_plus_convex_hull",
         "; label_visual_layout=three_line_default",
         "; label_path_order=line1_LTR_line2_LTR_line3_LTR",
-        "; label_path_rule=stroke_only_no_connectors",
-        "; label_width_mode=fixed_label_width",
-        f"; label_line_width={fmt(stroke_width)}",
+        "; label_path_rule=outer_contours_with_rails_and_hull",
+        "; label_width_mode=stroke_vs_connector",
+        f"; label_stroke_width={fmt(stroke_width)}",
+        f"; label_connector_width={fmt(connector_width)}",
         "; label_inner_contours_per_glyph=2",
         "; label_outer_hull_passes=2",
         "; label_inner_contour_gap_mm=0",
@@ -1706,7 +1907,8 @@ def emit_label(lines_out, cfg, label_lines, fa):
     for p0, p1, kind in typed_segments:
         if dist(cursor, p0) > 1e-9:
             lines_out.append(f"G0 X{fmt(p0[0])} Y{fmt(p0[1])} F{fmt(cfg['travel_speed']*60,1)} ; label stroke jump")
-        cross_section = stroke_width * layer_h
+        width = connector_width if kind == "connector" else stroke_width
+        cross_section = width * layer_h
         length = ((p1[0] - p0[0]) ** 2 + (p1[1] - p0[1]) ** 2) ** 0.5
         if length <= 0:
             continue
@@ -1715,7 +1917,7 @@ def emit_label(lines_out, cfg, label_lines, fa):
         end_point = p1
         cursor = p1
         lines_out.append(
-            f"G1 X{fmt(p1[0])} Y{fmt(p1[1])} E{fmt(e,5)} F{fmt(cfg['label_speed']*60,1)} ; label_{kind} width={fmt(stroke_width)}"
+            f"G1 X{fmt(p1[0])} Y{fmt(p1[1])} E{fmt(e,5)} F{fmt(cfg['label_speed']*60,1)} ; label_{kind} width={fmt(width)}"
         )
 
     lines_out.append(f"; label_estimated_E_mm={fmt(e_total,3)}")
